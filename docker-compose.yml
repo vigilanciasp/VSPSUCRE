@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  vsp-app:
+    build: .
+    container_name: vsp-sucre
+    restart: always
+    ports:
+      - "80:8501"
+    volumes:
+      - ./base_datos_vsp_sucre.xlsx:/app/base_datos_vsp_sucre.xlsx
+      - ./Auditoria_Logs.xlsx:/app/Auditoria_Logs.xlsx
+      - ./soportes_compromisos:/app/soportes_compromisos
+      - ./.streamlit:/app/.streamlit
+    environment:
+      - TZ=America/Bogota

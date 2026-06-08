@@ -1,0 +1,1899 @@
+import streamlit as st
+from streamlit_calendar import calendar
+import pandas as pd
+from datetime import datetime, time, timedelta
+import io
+import os
+import urllib.parse
+
+# ==========================================
+# 1. CONFIGURACIÓN E INYECCIÓN DE ESTILOS CSS
+# ==========================================
+st.set_page_config(layout="wide", page_title="Planificación VSP Sucre", page_icon="📅")
+
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif !important;
+    }
+    
+    /* Ocultar elementos nativos de Streamlit para un look app */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    .block-container { 
+        padding-top: 1rem; 
+        max-width: 95%;
+    }
+    
+    h1, h2, h3, h4, h5 {
+        font-weight: 700 !important;
+        letter-spacing: -0.5px;
+    }
+    
+    /* Botones Globales Premium */
+    .stButton>button {
+        border-radius: 12px !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        font-weight: 600 !important;
+        border: none !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+    }
+    
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+        filter: brightness(1.1);
+    }
+    
+    /* Tarjetas de Métricas KPI */
+    .metric-card {
+        background: linear-gradient(145deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        padding: 24px;
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        text-align: center;
+        box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .metric-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px -10px rgba(0,0,0,0.7);
+        border: 1px solid rgba(14, 165, 233, 0.3);
+    }
+    .metric-card h3 {
+        font-size: 2.5rem;
+        background: -webkit-linear-gradient(45deg, #38bdf8, #818cf8);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin: 10px 0;
+        font-weight: 800 !important;
+    }
+    
+    /* Contenedores Genéricos (Herramientas / Accesos) */
+    .tool-container {
+        background: rgba(30, 41, 59, 0.4);
+        backdrop-filter: blur(10px);
+        border-radius: 16px;
+        padding: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        margin-bottom: 20px;
+        box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+    }
+    
+    .custom-card {
+        padding: 20px; 
+        border-radius: 16px; 
+        background: rgba(30, 41, 59, 0.5); 
+        backdrop-filter: blur(12px);
+        margin-bottom: 15px; 
+        border-left: 5px solid #0ea5e9;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        transition: all 0.3s ease;
+        border-top: 1px solid rgba(255,255,255,0.05);
+        border-right: 1px solid rgba(255,255,255,0.05);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .custom-card:hover {
+        background: rgba(30, 41, 59, 0.8); 
+        transform: scale(1.02);
+    }
+    
+    /* Pestañas (Tabs) Estilizadas */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        padding: 10px 0;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: rgba(255,255,255,0.03);
+        border-radius: 10px 10px 0 0;
+        padding: 10px 24px;
+        font-weight: 600;
+        transition: background-color 0.3s ease;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        background-color: rgba(255,255,255,0.08);
+    }
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(0deg, rgba(14, 165, 233, 0.15) 0%, transparent 100%);
+        border-bottom: 3px solid #0ea5e9 !important;
+        color: #38bdf8 !important;
+    }
+    
+    /* Títulos Principales */
+    .main-title {
+        background: -webkit-linear-gradient(45deg, #ffffff, #94a3b8);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 800;
+        font-size: 2.8rem;
+        margin-bottom: 0px;
+        line-height: 1.1;
+    }
+    .sub-title {
+        color: #0ea5e9;
+        font-weight: 600;
+        letter-spacing: 1px;
+        font-size: 0.95rem;
+        text-transform: uppercase;
+        margin-top: 8px;
+    }
+    
+    /* Calendario */
+    .fc-day-sat, .fc-day-sun {
+        background-color: rgba(239, 68, 68, 0.05) !important;
+    }
+    .fc-event {
+        white-space: normal !important;
+        overflow: visible !important;
+
+        font-size: 0.85rem !important;
+        line-height: 1.3 !important;
+        padding: 6px 10px !important;
+        border-radius: 8px !important;
+        border: none !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .fc-event-title { font-weight: 600 !important; }
+    .fc-daygrid-event { margin-top: 5px !important; margin-bottom: 5px !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# 2. CONSTANTES Y CONFIGURACIONES GLOBALES
+# ==========================================
+# Si estamos en Railway/Docker, usamos una subcarpeta para el volumen persistente
+DATA_DIR = "data/" if os.environ.get("RAILWAY_ENVIRONMENT") or os.path.exists("/app") else ""
+if DATA_DIR and not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR, exist_ok=True)
+
+ARCHIVO_DB = os.path.join(DATA_DIR, "base_datos_vsp_sucre.xlsx")
+CARPETA_SOPORTES = os.path.join(DATA_DIR, "soportes_compromisos")
+ENLACE_PORTAL_WEB = "https://sivigilaweb.ins.gov.co/Sivigila/"  
+CORREO_DESTINO_HC = "vsp.historiasclinicas@sucre.gov.co"  
+
+# --- CONFIGURACIÓN DE FORMULARIOS GOOGLE FORMS ---
+BASE_GOOGLE_FORMS = "https://docs.google.com/forms/d/e/1FAIpQLSc1o7tjgmWqKhdTV1HuYTqJkSa3KPHI2BWQNrJ3zT9zndvX6A/viewform" 
+ID_TEMA_FORM = "entry.67209856"
+URL_GOOGLE_SHEET = "https://docs.google.com/spreadsheets/d/162S8gANBLi-d3oKJZKieFl0ff46flPYwE8U5zoE7XUI/edit?resourcekey=&gid=621967594#gid=621967594" 
+URL_DIRECTORIO_ENTIDADES = "https://docs.google.com/spreadsheets/d/12OoDlbA8L3uaAv0ZZqzSU08nLx0lzUf_/edit?rtpof=true&sd=true&gid=1427970023#gid=1427970023"
+
+if not os.path.exists(CARPETA_SOPORTES):
+    os.makedirs(CARPETA_SOPORTES)
+
+# --- LISTAS DE DATOS MAESTROS ---
+LISTA_RESPONSABLES = [
+    "Seleccione...", "ADALGISA PATRON CONDE", "ANA GABRIELA DIAZ ANAYA", "ANA LUCIA MENDOZA TAMARA", 
+    "BALDIR PABA OSORIO", "LILIBETH DAZA CAMELO", "EDER JESUS PATERNINA RODRIGUEZ", "ELIANA CECILIA MORALES MELENDEZ", 
+    "ENITT DEL ROSARIO HERNANDEZ DORIAS", "ESPERANZA DEL PILAR VARGAS VARGAS", "HECTOR FABIO RENTERIA", 
+    "ISAAC JACOB VELASQUEZ DOMINGUEZ", "JAVIER MAURICIO CORREA PATERNOSTRO", "KAREN MARGARITA ALDANA ARRIETA", 
+    "KEVIN ALBERTO BARBARAN ALVAREZ", "LEVY SUNILDA CAMPO LASSO", "LOLI LUZ SIERRA DIAZ", "LORENA PORTILLO CUENTAS", 
+    "LUCIA CLARETH HERNANDEZ PEREZ", "LUISA FERNANDA REYES DÍAZ", "LUZMILA VILLAMIZAR MOLINA", 
+    "MARIA CANDELARIA MEJIA LOPEZ", "MARIA JOSE CANTILLO ROYERO", "MARLON ESPITIA CERPA", 
+    "MARTHA CECILIA MELENDEZ MARTINEZ", "MERY DE JESUS NARVAEZ ASSIA", "NICOLASA MARGARITA ARRIETA SERPA", 
+    "NURYS CONCEPCIÓN HERRERA GUTIÉRREZ", "VIRGINIA OLIVERO GARCIA", "YARLENY ESTHER BERRIO ACOSTA", 
+    "MARIA JOSE PEÑARANDA", "BRENDER BARRIOS", "ANA KARINA PEÑATES DE ARCE", "DINO VERGARA PEREZ", 
+    "JUAN CARLOS GARCIA VIVERO", "MANUEL ORTEGA HERNANDEZ", "MARIA CAMPO", "VILMA MERCADO CUMPLIDO"
+]
+
+LISTA_MUNICIPIOS = [
+    "Seleccione...", "Buenavista", "Caimito", "Chalán", "Colosó", "Corozal", "Coveñas", "El Roble", 
+    "Galeras", "Guaranda", "La Unión", "Los Palmitos", "Majagual", "Morroa", "Ovejas", "Palmito", 
+    "Sampués", "San Benito Abad", "San Juan de Betulia", "San Marcos", "San Onofre", "San Pedro", 
+    "Sincé", "Sincelejo", "Sucre", "Tolú", "Toluviejo"
+]
+
+LISTA_LUGARES = ["Seleccione...", "Sala Situacional", "Auditorio Panzigua", "Otro"]
+
+LISTA_TIPOS_EVENTO = [
+    "ASISTENCIA TECNICA", "BAC", "BAI", "CAPACITACION", "COMITÉ ESTADISTICAS VITALES", 
+    "COMITÉ SANIDAD PORTUARIA", "COVE", "IEC", "MESA DE TRABAJO", "MONITOREO", "REUNION", 
+    "SAR", "SEGUIMIENTO", "UNIDAD DE ANALISIS", "OTRO"
+]
+
+LISTA_EISP = [
+    "Gestión Institucional / Transversal", "Dengue (210)", "Malaria (465)", "Chagas (205)",
+    "Mortalidad Materna (551)", "Mortalidad Perinatal (560)", "Infección Respiratoria Aguda - IRA (345)",
+    "Vigilancia de Violencias de Género (875)", "Tuberculosis (810)", "VIF / Salud Mental (900)"
+]
+
+# ==========================================
+# 3. CAPA DE CONTROL DE PERSISTENCIA (EXCEL)
+# ==========================================
+def inicializar_db():
+    esquema = {
+        'Eventos': ["Fecha", "Hora Inicio", "Hora Fin", "Responsable", "Tipo de Evento", "Municipio", "Lugar", "Vehículo", "Estado", "Observaciones"],
+        'Disponibilidad': ["Semana_Inicio", "Integrantes", "Cargos", "Laboratorio_Responsable", "Laboratorio_Cargo"],
+        'Compromisos': ["Fecha_Acuerdo", "Compromiso", "Responsable", "Plazo", "Estado", "Respuesta_Avance", "Ruta_Soporte"],
+        'Actas': ["Fecha_Acta", "Tipo_Comite", "Responsable_Acta", "Asistentes", "Temas", "Conclusiones_Compromisos"],
+        'Alertas_Inventario': ["Fecha_Registro", "Tipo_Item", "Titulo_Nombre", "Descripcion_Cantidad", "Clasificacion_Riesgo"],
+        'Historial_Enlaces': ["Fecha_Registro", "Tipo_Evento", "Tema_Evento", "Responsable_Ponente", "Enlace_Formulario"],
+        'Usuarios': ["Usuario", "Contrasena", "Nombre_Completo", "Rol"],
+        'VBC_Rumores': ['Fecha_Reporte', 'Municipio', 'Comunidad_Vereda', 'Tipo_Sindrome', 'Fuente_Reporte', 'Descripcion_Evento', 'Estado_Verificacion', 'Responsable_Verificacion'],
+        'Directorio_Contactos': ['Nombre', 'Entidad', 'Municipio', 'Correo', 'Telefono', 'Rol'],
+        'Solicitudes_Externas': ['Fecha_Solicitud', 'Tipo_Solicitud', 'Paciente', 'Identificacion', 'EAPB', 'Municipio', 'Responsable_Solicitud', 'Estado', 'Ruta_Documento'],
+        'Solicitudes_Teams': ['Fecha_Solicitud', 'Fecha_Evento', 'Tema', 'Responsable_Evento', 'Encargado_Links', 'Estado', 'Enlace_Teams'],
+        'Brotes_ERI': ['Fecha_Alerta', 'Municipio', 'Patologia', 'Fuente', 'Descripcion', 'Equipo_Asignado', 'Estado', 'Ruta_ERI'],
+        'Tablero_Problemas': ['Fecha_Reporte', 'Municipio', 'Categoria', 'Descripcion', 'Responsable', 'Estado', 'Respuesta'],
+        'Auditoria_Logs': ['Fecha_Hora', 'Usuario', 'Accion', 'Modulo']
+    }
+    
+    if not os.path.exists(ARCHIVO_DB):
+        with pd.ExcelWriter(ARCHIVO_DB, engine='openpyxl') as writer:
+            for hoja, columnas in esquema.items():
+                if hoja == 'Usuarios':
+                    # Crear administrador maestro por defecto
+                    df_admin_init = pd.DataFrame([{"Usuario": "admin", "Contrasena": "Vsp26", "Nombre_Completo": "ADMINISTRADOR PRINCIPAL", "Rol": "Administrador Total"}])
+                    df_admin_init.to_excel(writer, sheet_name=hoja, index=False)
+                else:
+                    pd.DataFrame(columns=columnas).to_excel(writer, sheet_name=hoja, index=False)
+    else:
+        try:
+            todas_las_hojas = pd.read_excel(ARCHIVO_DB, sheet_name=None)
+            hojas_actuales = list(todas_las_hojas.keys())
+            
+            hojas_faltantes = [hoja for hoja in esquema.keys() if hoja not in hojas_actuales]
+            
+            if hojas_faltantes:
+                for hoja in hojas_faltantes:
+                    columnas = esquema[hoja]
+                    if hoja == 'Usuarios':
+                        todas_las_hojas[hoja] = pd.DataFrame([{"Usuario": "admin", "Contrasena": "Vsp26", "Nombre_Completo": "ADMINISTRADOR PRINCIPAL", "Rol": "Administrador Total"}])
+                    else:
+                        todas_las_hojas[hoja] = pd.DataFrame(columns=columnas)
+                        
+                with pd.ExcelWriter(ARCHIVO_DB, engine='openpyxl') as writer:
+                    for n_hoja, d_hoja in todas_las_hojas.items():
+                        d_hoja.to_excel(writer, sheet_name=n_hoja, index=False)
+        except Exception as e:
+            st.error(f"Error crítico en chequeo de base de datos: {e}")
+
+@st.cache_data(show_spinner=False)
+def cargar_datos(hoja):
+    try:
+        if not os.path.exists(ARCHIVO_DB):
+            inicializar_db()
+        df = pd.read_excel(ARCHIVO_DB, sheet_name=hoja)
+        if hoja == 'Usuarios' and 'Permisos' not in df.columns:
+            df['Permisos'] = "🏠 Inicio,📝 Registrar Actividad"
+        return df.fillna("").astype(str) if hoja in ['Disponibilidad', 'Compromisos', 'Actas', 'Alertas_Inventario', 'Historial_Enlaces', 'Usuarios', 'VBC_Rumores', 'Directorio_Contactos', 'Solicitudes_Externas', 'Solicitudes_Teams', 'Brotes_ERI', 'Tablero_Problemas', 'Auditoria_Logs'] else df.fillna("")
+    except Exception as e:
+        st.error(f"Error al leer la pestaña {hoja}: {e}")
+        return pd.DataFrame()
+
+def guardar_datos(df, hoja):
+    try:
+        if os.path.exists(ARCHIVO_DB):
+            todas_las_hojas = pd.read_excel(ARCHIVO_DB, sheet_name=None)
+        else:
+            todas_las_hojas = {}
+        
+        todas_las_hojas[hoja] = df
+        
+        with pd.ExcelWriter(ARCHIVO_DB, engine='openpyxl') as writer:
+            for n_hoja, d_hoja in todas_las_hojas.items():
+                d_hoja.to_excel(writer, sheet_name=n_hoja, index=False)
+                
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"Error de escritura en disco: {e}")
+        return False
+
+# ==========================================
+# 4. FUNCIONES AUXILIARES
+# ==========================================
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+def registrar_log(accion, modulo="General"):
+    try:
+        usuario = st.session_state.get("usuario_conectado", "Sistema")
+        fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        df_logs = cargar_datos('Auditoria_Logs')
+        nuevo_log = pd.DataFrame([{"Fecha_Hora": fecha_hora, "Usuario": usuario, "Accion": accion, "Modulo": modulo}])
+        guardar_datos(pd.concat([df_logs, nuevo_log], ignore_index=True), 'Auditoria_Logs')
+    except Exception:
+        pass
+
+def enviar_correo_outlook(destinatario, asunto, cuerpo):
+    try:
+        if "EMAIL_SENDER" not in st.secrets or "EMAIL_PASSWORD" not in st.secrets:
+            return False, "Credenciales no configuradas. Crea el archivo .streamlit/secrets.toml con EMAIL_LOGIN, EMAIL_PASSWORD y EMAIL_SENDER."
+        
+        # El correo que aparecerá en el "De:" (el alias)
+        remitente = st.secrets["EMAIL_SENDER"]
+        password = st.secrets["EMAIL_PASSWORD"]
+        
+        # Si existe un EMAIL_LOGIN, lo usamos para autenticar, si no, usamos el remitente
+        login_user = st.secrets.get("EMAIL_LOGIN", remitente)
+        
+        msg = MIMEMultipart()
+        msg['From'] = remitente
+        msg['To'] = destinatario
+        msg['Subject'] = asunto
+        msg.attach(MIMEText(cuerpo, 'plain'))
+        
+        server = smtplib.SMTP('smtp.office365.com', 587)
+        server.starttls()
+        # Iniciamos sesión con la cuenta principal real
+        server.login(login_user, password)
+        # Enviamos el mensaje indicando que proviene del alias
+        server.send_message(msg)
+        server.quit()
+        return True, "Correo enviado correctamente."
+    except Exception as e:
+        return False, str(e)
+
+def formatear_hora_12h(hora_str):
+    try:
+        return datetime.strptime(str(hora_str).strip(), "%H:%M").strftime("%I:%M %p").lower()
+    except Exception:
+        return str(hora_str)
+
+def calcular_semaforo_compromiso(row):
+    estado_act = str(row['Estado']).upper()
+    if "CUMPLIDO" in estado_act or "FINALIZADO" in estado_act: 
+        return "✅ FINALIZADO"
+    try:
+        plazo_dt = pd.to_datetime(row['Plazo']).date()
+        hoy_dt = datetime.today().date()
+        dias = (plazo_dt - hoy_dt).days
+        if dias < 0: return "🔴 VENCIDO"
+        elif dias <= 3: return f"🔴 CRÍTICO ({dias} d)"
+        elif dias <= 7: return f"🟡 PRÓXIMO ({dias} d)"
+        else: return f"🟢 EN TIEMPO ({dias} d)"
+    except Exception:
+        return str(row['Estado'])
+
+def obtener_semana_epidemiologica(fecha): 
+    return fecha.isocalendar()[1]
+
+def generar_semanas_del_mes(anio, mes):
+    semanas = []
+    fecha_iter = datetime(anio, mes, 1)
+    ultimo_dia = datetime(anio, 12, 31) if mes == 12 else datetime(anio, mes + 1, 1) - timedelta(days=1)
+    lunes_inicial = fecha_iter - timedelta(days=fecha_iter.weekday())
+    while lunes_inicial <= ultimo_dia:
+        semanas.append((lunes_inicial, lunes_inicial + timedelta(days=6), obtener_semana_epidemiologica(lunes_inicial)))
+        lunes_inicial += timedelta(days=7)
+    return sorted(list(set(semanas)), key=lambda x: x[0])
+
+inicializar_db()
+
+# --- MANEJO ROBUSTO DE SESIÓN Y AUTENTICACIÓN ---
+if "autenticado" not in st.session_state:
+    st.session_state["autenticado"] = False
+if "usuario_conectado" not in st.session_state:
+    st.session_state["usuario_conectado"] = None
+if "rol_conectado" not in st.session_state:
+    st.session_state["rol_conectado"] = None
+if "seccion_actual" not in st.session_state:
+    st.session_state["seccion_actual"] = "🏠 Inicio"
+if "fecha_seleccionada" not in st.session_state:
+    st.session_state["fecha_seleccionada"] = datetime.today().strftime("%Y-%m-%d")
+if "mensaje_exito_temp" not in st.session_state:
+    st.session_state["mensaje_exito_temp"] = None
+if "ultimo_link_virtual" not in st.session_state:
+    st.session_state["ultimo_link_virtual"] = None
+if "permisos_conectado" not in st.session_state:
+    st.session_state["permisos_conectado"] = []
+
+# ==========================================
+# 5. CONTROL DE ACCESO (LOGIN) CENTRALIZADO
+# ==========================================
+if not st.session_state["autenticado"]:
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1.2, 1])
+    with col2:
+        st.markdown("<div class='metric-card' style='text-align: center; padding: 40px;'>", unsafe_allow_html=True)
+        if os.path.exists("logo.png"): st.image("logo.png", width=120)
+        st.markdown("<h2 style='margin-bottom:5px;'>Sistema VSP Sucre</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #94a3b8; margin-bottom: 25px;'>Por favor, inicie sesión para continuar</p>", unsafe_allow_html=True)
+        
+        with st.form("login_form", clear_on_submit=False):
+            txt_user = st.text_input("Usuario:", key="login_user")
+            txt_pass = st.text_input("Contraseña:", type="password", key="login_pass")
+            st.markdown("<br>", unsafe_allow_html=True)
+            btn_login = st.form_submit_button("🔓 Entrar al Sistema", use_container_width=True, type="primary")
+        
+        if btn_login:
+            df_users_db = cargar_datos('Usuarios')
+            validado = df_users_db[(df_users_db["Usuario"] == txt_user.strip()) & (df_users_db["Contrasena"] == txt_pass.strip())]
+            
+            if not validado.empty:
+                st.session_state["autenticado"] = True
+                st.session_state["usuario_conectado"] = validado.iloc[0]["Nombre_Completo"]
+                st.session_state["rol_conectado"] = validado.iloc[0]["Rol"]
+                
+                # Cargar Permisos Dinámicos
+                if "Permisos" in validado.columns and pd.notna(validado.iloc[0]["Permisos"]) and str(validado.iloc[0]["Permisos"]).strip() != "":
+                    st.session_state["permisos_conectado"] = [p.strip() for p in str(validado.iloc[0]["Permisos"]).split(",") if p.strip()]
+                else:
+                    st.session_state["permisos_conectado"] = ["🏠 Inicio", "📝 Registrar Actividad"]
+                
+                registrar_log("Inicio de sesión exitoso", "Autenticación")
+                st.rerun()
+            else:
+                st.error("❌ Credenciales incorrectas.")
+        st.markdown("</div>", unsafe_allow_html=True)
+    st.stop() # Bloquea el resto de la app hasta loguearse
+
+# ==========================================
+# 6. ENCABEZADO Y SISTEMA DE NAVEGACIÓN POR ROLES
+# ==========================================
+col_logo, col_titulos, col_portal = st.columns([1, 4.5, 1])
+with col_logo:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if os.path.exists("logo.png"): st.image("logo.png", width=120)
+    else: st.markdown("### 🛡️ VSP")
+with col_titulos:
+    st.markdown("<h1 class='main-title'>Sistema de Planificación VSP</h1>", unsafe_allow_html=True)
+    st.markdown("<p class='sub-title'>Gobernación de Sucre • Dirección de Salud Pública</p>", unsafe_allow_html=True)
+with col_portal:
+    st.markdown("<div style='text-align: right; margin-top: 10px;'>", unsafe_allow_html=True)
+    st.markdown(f"👤 <b style='color:#0ea5e9;'>{st.session_state.get('usuario_conectado', 'Invitado')}</b><br><small>{st.session_state.get('rol_conectado', '')}</small>", unsafe_allow_html=True)
+    if st.button("🔒 Cerrar Sesión"):
+        registrar_log("Cierre de sesión manual", "Autenticación")
+        st.session_state["autenticado"] = False
+        st.session_state["usuario_conectado"] = None
+        st.session_state["rol_conectado"] = None
+        st.session_state["permisos_conectado"] = []
+        st.session_state["seccion_actual"] = "🏠 Inicio"
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Grid de Navegación Dinámico según el Rol del Usuario conectado
+nav_cols_1 = st.columns(4)
+secciones_1 = ["🏠 Inicio", "📝 Registrar Actividad", "🛡️ Disponibilidad Semanal", "📋 Compromisos Técnicos"]
+for idx, sec in enumerate(secciones_1):
+    with nav_cols_1[idx]:
+        if sec not in st.session_state.get("permisos_conectado", []) and st.session_state.get("rol_conectado") != "Administrador Total":
+            st.button(sec, use_container_width=True, disabled=True)
+        else:
+            if st.button(sec, use_container_width=True, type="primary" if st.session_state["seccion_actual"] == sec else "secondary"):
+                st.session_state["seccion_actual"] = sec; st.rerun()
+
+# Segunda fila de botones que incluye el nuevo módulo exclusivo de gestión de usuarios
+secciones_2 = ["🛠️ Enlaces y Solicitudes HC", "📄 Actas e Informes", "🚨 Alertas e Inventario", "🔍 Filtros y Dashboard", "⚙️ Panel Maestro y Roles"]
+nav_cols_2 = st.columns(len(secciones_2))
+for idx, sec in enumerate(secciones_2):
+    with nav_cols_2[idx]:
+        if sec not in st.session_state.get("permisos_conectado", []) and st.session_state.get("rol_conectado") != "Administrador Total":
+            st.button(sec, use_container_width=True, disabled=True)
+        else:
+            if st.button(sec, use_container_width=True, type="primary" if st.session_state["seccion_actual"] == sec else "secondary"):
+                st.session_state["seccion_actual"] = sec; st.rerun()
+
+# Tercera fila para los nuevos módulos epidemiológicos
+secciones_3 = ["🏘️ Vigilancia Comunitaria (VBC)", "📈 Tableros SIVIGILA", "🛡️ Calidad del Dato", "📞 Directorio de Red"]
+nav_cols_3 = st.columns(len(secciones_3))
+for idx, sec in enumerate(secciones_3):
+    with nav_cols_3[idx]:
+        if sec not in st.session_state.get("permisos_conectado", []) and st.session_state.get("rol_conectado") != "Administrador Total":
+            st.button(sec, use_container_width=True, disabled=True)
+        else:
+            if st.button(sec, use_container_width=True, type="primary" if st.session_state["seccion_actual"] == sec else "secondary"):
+                st.session_state["seccion_actual"] = sec; st.rerun()
+
+# Cuarta fila para módulos avanzados VSP
+secciones_4 = ["🚨 Brotes y ERI", "🛑 Tablero de Problemas", "🤖 Asistente Redactor VSP", "🛡️ Auditoría y Logs"]
+nav_cols_4 = st.columns(len(secciones_4))
+for idx, sec in enumerate(secciones_4):
+    with nav_cols_4[idx]:
+        if sec not in st.session_state.get("permisos_conectado", []) and st.session_state.get("rol_conectado") != "Administrador Total":
+            st.button(sec, use_container_width=True, disabled=True)
+        else:
+            if st.button(sec, use_container_width=True, type="primary" if st.session_state["seccion_actual"] == sec else "secondary"):
+                st.session_state["seccion_actual"] = sec; st.rerun()
+
+st.markdown("---")
+
+if st.session_state["mensaje_exito_temp"]:
+    st.success(st.session_state["mensaje_exito_temp"])
+    st.session_state["mensaje_exito_temp"] = None
+
+# ==========================================
+# 7. SECCIONES MODULARIZADAS (VISTAS)
+# ==========================================
+
+def vista_inicio():
+    df_meta = cargar_datos('Eventos')
+    hoy = datetime.today().date()
+    
+    if not df_meta.empty:
+        df_meta["Fecha_DT"] = pd.to_datetime(df_meta["Fecha"], errors='coerce')
+        df_ua = df_meta[(df_meta["Lugar"] == "UNIDAD DE ANALISIS") | (df_meta["Tipo de Evento"] == "UNIDAD DE ANALISIS")]
+        ua_vig = len(df_ua[df_ua["Fecha_DT"].dt.date >= hoy])
+        ua_ven = len(df_ua[df_ua["Fecha_DT"].dt.date < hoy])
+        sala_mes = len(df_meta[(df_meta["Lugar"] == "Sala Situacional") & (df_meta["Fecha_DT"].dt.month == hoy.month)])
+        veh_hoy = len(df_meta[(df_meta["Fecha"].astype(str) == hoy.strftime("%Y-%m-%d")) & (df_meta["Vehículo"] == "Sí")])
+
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.markdown(f"<div class='metric-card'>📌 <b>Total Actividades</b><h3>{len(df_meta)}</h3></div>", unsafe_allow_html=True)
+        m2.markdown(f"<div class='metric-card'>📅 <b>Actividades Hoy</b><h3>{len(df_meta[df_meta['Fecha'].astype(str) == hoy.strftime('%Y-%m-%d')])}</h3></div>", unsafe_allow_html=True)
+        m3.markdown(f"<div class='metric-card'>🏢 <b>Sala Situacional</b><h3>{sala_mes} Prog.</h3></div>", unsafe_allow_html=True)
+        m4.markdown(f"<div class='metric-card'>🧬 <b>U. Análisis</b><h3>{len(df_ua)} Total</h3><small>🟢 {ua_vig} Vig | 🔴 {ua_ven} Ven</small></div>", unsafe_allow_html=True)
+        m5.markdown(f"<div class='metric-card'>🚗 <b>Con Vehículo</b><h3>{veh_hoy} Hoy</h3></div>", unsafe_allow_html=True)
+        st.divider()
+
+    st.markdown("### 🚀 Accesos Directos de la Red")
+    col_ad1, col_ad2, col_ad3, col_ad4 = st.columns(4)
+    with col_ad1:
+        st.link_button("🌐 Portal SIVIGILA 4.0", ENLACE_PORTAL_WEB, use_container_width=True)
+    with col_ad2:
+        st.link_button("📞 Directorio Externo (Drive)", URL_DIRECTORIO_ENTIDADES, use_container_width=True)
+    with col_ad3:
+        if st.button("🎥 Solicitudes Virtuales (Teams/Forms)", use_container_width=True):
+            st.session_state["seccion_actual"] = "🛠️ Enlaces y Solicitudes HC"
+            st.rerun()
+    with col_ad4:
+        if st.button("🚨 Alertas y Notificaciones", use_container_width=True):
+            st.session_state["seccion_actual"] = "🚨 Alertas e Inventario"
+            st.rerun()
+    st.divider()
+
+    st.markdown("### 🔍 Panel de Filtros Cruzados (Agenda Mensual)")
+    f_col1, f_col2, f_col3 = st.columns(3)
+    
+    lista_opciones_lugar = ["Mostrar todos los espacios", "Sala Situacional"]
+    if not df_meta.empty:
+        lista_opciones_lugar.extend(sorted([str(l) for l in df_meta["Lugar"].unique() if l and str(l).strip() not in ["", "Sala Situacional"]]))
+    lugar_sel = f_col1.selectbox("Filtrar por Espacio/Lugar:", lista_opciones_lugar)
+    
+    lista_opciones_resp = ["Mostrar todos los responsables"]
+    if not df_meta.empty:
+        lista_opciones_resp.extend(sorted([str(r) for r in df_meta["Responsable"].unique() if r]))
+    resp_sel = f_col2.selectbox("Filtrar por Responsable:", lista_opciones_resp)
+    
+    lista_opciones_mun = ["Mostrar todos los municipios"]
+    if not df_meta.empty:
+        lista_opciones_mun.extend(sorted([str(m) for m in df_meta["Municipio"].unique() if m]))
+    mun_sel = f_col3.selectbox("Filtrar por Municipio:", lista_opciones_mun)
+
+    df_eventos_cal = df_meta.copy() if not df_meta.empty else pd.DataFrame()
+    if not df_eventos_cal.empty:
+        if lugar_sel != "Mostrar todos los espacios": df_eventos_cal = df_eventos_cal[df_eventos_cal["Lugar"] == lugar_sel]
+        if resp_sel != "Mostrar todos los responsables": df_eventos_cal = df_eventos_cal[df_eventos_cal["Responsable"] == resp_sel]
+        if mun_sel != "Mostrar todos los municipios": df_eventos_cal = df_eventos_cal[df_eventos_cal["Municipio"] == mun_sel]
+
+    st.markdown("### 🗓️ Calendario Institucional Principal")
+    eventos_list = []
+    
+    # Marcar festivos en el calendario
+    import holidays
+    co_holidays = holidays.CO(years=hoy.year)
+    for festivo_date, festivo_name in co_holidays.items():
+        eventos_list.append({
+            "title": f"🎉 {festivo_name}",
+            "start": festivo_date.strftime("%Y-%m-%d"),
+            "display": "background",
+            "backgroundColor": "rgba(239, 68, 68, 0.2)"
+        })
+
+    if not df_eventos_cal.empty:
+        for _, r in df_eventos_cal.iterrows():
+            tipo_ev_upper = str(r["Tipo de Evento"]).upper()
+            if "UNIDAD DE ANALISIS" in tipo_ev_upper or r["Lugar"] == "UNIDAD DE ANALISIS": color = "#9b59b6"
+            elif "CAPACITACION" in tipo_ev_upper: color = "#e67e22"
+            elif r["Lugar"] == "Sala Situacional": color = "#2ecc71"
+            elif r["Lugar"] == "Auditorio Panzigua": color = "#34495e"
+            else: color = "#36a2eb"
+            
+            v_emoji = " 🚗" if r["Vehículo"] == "Sí" else ""
+            hora_limpia = formatear_hora_12h(r['Hora Inicio'])
+            encabezado_lugar = "🏢 SALA" if r["Lugar"] == "Sala Situacional" else "🎭 AUDITORIO" if r["Lugar"] == "Auditorio Panzigua" else f"📍 {r['Tipo de Evento']}"
+            titulo_completo = f"{encabezado_lugar} | ⏰ {hora_limpia} - {r['Tipo de Evento']} | 👥 {r['Responsable']} ({r['Municipio']}){v_emoji}"
+            
+            eventos_list.append({
+                "title": titulo_completo,
+                "start": f"{r['Fecha']}T{r['Hora Inicio']}:00",
+                "end": f"{r['Fecha']}T{r['Hora Fin']}:00",
+                "backgroundColor": color, "borderColor": color
+            })
+    
+    st.markdown("<div style='background: rgba(30,41,59,0.3); padding:20px; border-radius:16px;'>", unsafe_allow_html=True)
+    interaccion_cal = calendar(events=eventos_list, options={"locale": "es", "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,timeGridWeek"}}, key="cal_vsp_interactivo")
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    if interaccion_cal:
+        if "eventClick" in interaccion_cal: st.session_state["fecha_seleccionada"] = interaccion_cal["eventClick"]["event"]["start"].split("T")[0]
+        elif "dateClick" in interaccion_cal: st.session_state["fecha_seleccionada"] = interaccion_cal["dateClick"]["date"].split("T")[0]
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    with st.expander("🛡️ Ver Equipo de Disponibilidad de la Semana Actual", expanded=False):
+        lunes = hoy - timedelta(days=hoy.weekday())
+        df_d = cargar_datos('Disponibilidad')
+        reg_sem = df_d[df_d["Semana_Inicio"] == lunes.strftime("%Y-%m-%d")] if not df_d.empty else pd.DataFrame()
+        
+        if not reg_sem.empty:
+            st.markdown("**🔹 Vigilancia (Sala de Análisis):**")
+            integrantes = [i for i in str(reg_sem.iloc[0]["Integrantes"]).split(";") if i.strip()]
+            cargos = [c for c in str(reg_sem.iloc[0]["Cargos"]).split(";") if c.strip()]
+            cols_disp = st.columns(len(integrantes))
+            for i, nombre in enumerate(integrantes):
+                cols_disp[i].info(f"👤 **{nombre}** \n*{cargos[i] if i < len(cargos) else 'Asignado'}*")
+            lab_resp = str(reg_sem.iloc[0]["Laboratorio_Responsable"]).strip()
+            lab_cargo = str(reg_sem.iloc[0]["Laboratorio_Cargo"]).strip()
+            if lab_resp and lab_resp not in ["nan", ""]:
+                st.markdown("**🔬 Laboratorio de Salud Pública:**")
+                st.success(f"🧫 **{lab_resp}** \n*{lab_cargo if lab_cargo else 'Apoyo Analítico'}*")
+        else: 
+            st.warning("⚠️ Sin equipo de turno asignado para esta semana.")
+
+    st.markdown("---")
+    c_tit_abajo, c_btn_exp = st.columns([3, 1])
+    c_tit_abajo.subheader(f"🔍 Agenda Operativa del Día: {st.session_state['fecha_seleccionada']}")
+    
+    if not df_eventos_cal.empty:
+        output_stream = io.BytesIO()
+        with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
+            df_eventos_cal.to_excel(writer, index=False, sheet_name='Agenda_Filtrada')
+        if st.session_state["rol_conectado"] != "Consulta / Invitado":
+            c_btn_exp.download_button(label="📥 Exportar Agenda Filtrada", data=output_stream.getvalue(), file_name=f"agenda_filtrada_{hoy.strftime('%Y%m%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+
+    df_filtrado_dia = df_eventos_cal[df_eventos_cal["Fecha"].astype(str) == st.session_state["fecha_seleccionada"]] if not df_eventos_cal.empty else pd.DataFrame()
+    if not df_filtrado_dia.empty:
+        for _, fila in df_filtrado_dia.sort_values(by="Hora Inicio").iterrows():
+            transporte = "🚗 Requiere Vehículo Institucional" if fila["Vehículo"] == "Sí" else "🚶 Desplazamiento Autónomo / Sin Vehículo"
+            st.markdown(f"""
+            <div class='custom-card'>
+                <h4 style='margin:0px; color:#38bdf8;'>⏰ {fila['Hora Inicio']} - {fila['Hora Fin']} | {fila['Tipo de Evento']}</h4>
+                <p style='margin:4px 0px;'>👤 <b>Responsable:</b> {fila['Responsable']} | 📍 <b>Lugar:</b> {fila['Lugar']} ({fila['Municipio']})</p>
+                <p style='margin:4px 0px; color:#cbd5e1;'><b>Observaciones:</b> {fila['Observaciones'] if fila['Observaciones'] else 'Ninguna'}</p>
+                <p style='margin:4px 0px; font-size:0.9em; color:#a7f3d0;'><b>Logística VSP:</b> {transporte}</p>
+            </div>
+            """, unsafe_allow_html=True)
+    else: 
+        st.info("🟢 No existen actividades técnicas programadas para la fecha seleccionada.")
+
+def vista_registrar_actividad():
+    st.markdown("### 📝 Formulario de Registro de Eventos")
+    with st.form("form_reg", clear_on_submit=False):
+        f_fecha = st.date_input("Fecha", value=datetime.today())
+        c_h1, c_h2 = st.columns(2)
+        f_hi = c_h1.time_input("Hora Inicio", value=time(8, 0))
+        f_hf = c_h2.time_input("Hora Fin", value=time(10, 0))
+        f_resp = st.selectbox("Responsable Técnico", LISTA_RESPONSABLES)
+        f_tipo = st.selectbox("Tipo de Evento", LISTA_TIPOS_EVENTO)
+        f_mun = st.selectbox("Municipio Destino", LISTA_MUNICIPIOS)
+        f_lugar = st.selectbox("Espacio Físico / Lugar", LISTA_LUGARES)
+        f_veh = st.toggle("¿Requiere Vehículo para Desplazamiento Territorial?")
+        f_obs = st.text_area("Observaciones del Evento")
+        btn_guardar = st.form_submit_button("💾 Agendar y Guardar Actividad")
+
+    if btn_guardar:
+        import holidays
+        co_holidays = holidays.CO(years=f_fecha.year)
+        
+        hi_str, hf_str = f_hi.strftime("%H:%M"), f_hf.strftime("%H:%M")
+        
+        if f_fecha.weekday() >= 5:
+            st.error("❌ Operación Denegada: El sistema tiene bloqueado el agendamiento para fines de semana (Sábados y Domingos).")
+        elif f_fecha in co_holidays:
+            st.error(f"❌ Operación Denegada: El día {f_fecha.strftime('%d/%m/%Y')} es festivo ({co_holidays.get(f_fecha)}). No se permite agendar actividades en días feriados.")
+        elif f_hi >= f_hf: 
+            st.error("🚨 Error de consistencia horaria: La 'Hora Fin' debe ser estrictamente posterior a la 'Hora Inicio'.")
+        elif "Seleccione..." in [f_resp, f_mun, f_lugar]: 
+            st.error("❌ Faltan campos obligatorios por seleccionar.")
+        else:
+            cruce_espacio, cruce_responsable = False, False
+            eventos_cal = cargar_datos('Eventos')
+            if not eventos_cal.empty:
+                for _, e in eventos_cal.iterrows():
+                    if str(e["Fecha"]) == f_fecha.strftime("%Y-%m-%d"):
+                        if hi_str < str(e["Hora Fin"]) and hf_str > str(e["Hora Inicio"]):
+                            if f_lugar in ["Sala Situacional", "Auditorio Panzigua"] and e["Lugar"] == f_lugar: cruce_espacio = True
+                            if e["Responsable"] == f_resp: cruce_responsable = True
+            if cruce_espacio: 
+                st.error(f"🚨 Conflicto logístico: El espacio '{f_lugar}' ya se encuentra ocupado en la franja horaria seleccionada.")
+            elif cruce_responsable: 
+                st.error(f"👤 Conflicto de agenda: El funcionario {f_resp} ya tiene asignada otra actividad en este mismo horario.")
+            else:
+                nuevo = pd.DataFrame([{"Fecha": f_fecha.strftime("%Y-%m-%d"), "Hora Inicio": hi_str, "Hora Fin": hf_str, "Responsable": f_resp, "Tipo de Evento": f_tipo, "Municipio": f_mun, "Lugar": f_lugar, "Vehículo": "Sí" if f_veh else "No", "Estado": "Programado", "Observaciones": f_obs}])
+                guardar_datos(pd.concat([eventos_cal, nuevo], ignore_index=True), 'Eventos')
+                st.session_state["mensaje_exito_temp"] = "🎉 ¡Actividad registrada y sincronizada exitosamente!"
+                st.session_state["seccion_actual"] = "🏠 Inicio"; st.rerun()
+
+def vista_disponibilidad_semanal():
+    st.markdown("### 🛡️ Equipo de Disponibilidad por Semana Epidemiológica (S.E.)")
+    hoy_dt = datetime.today()
+    semana_actual_epi = obtener_semana_epidemiologica(hoy_dt)
+    st.markdown(f'<div style="padding:12px; border-radius:10px; background-color:rgba(14, 116, 144, 0.2); border-left: 5px solid #06b6d4; margin-bottom:20px;"><h4 style="margin:0px; color:#22d3ee;">... SEMANA EPIDEMIOLÓGICA ACTUAL: S.E. {semana_actual_epi}</h4></div>', unsafe_allow_html=True)
+
+    df_d = cargar_datos('Disponibilidad')
+    
+    # Restringir pestañas de configuración a los roles que no son administradores totales
+    if st.session_state["rol_conectado"] == "Administrador Total" or "🛡️ Disponibilidad Semanal" in st.session_state.get("permisos_conectado", []):
+        tab_cons, tab_adm = st.tabs(["🔍 Consultar Planificación de Turnos", "🔐 Panel de Configuración (Administrador)"])
+    else:
+        tab_cons = st.container()
+        tab_adm = None
+
+    semanas_lista = []
+    anio_actual = datetime.today().year
+    for m in range(1, 13): semanas_lista.extend(generar_semanas_del_mes(anio_actual, m))
+    semanas_lista = sorted(list(set(semanas_lista)), key=lambda x: x[0])
+    opciones_futuras = [f"S.E. {w[2]} (Del {w[0].strftime('%d/%m/%Y')} al {w[1].strftime('%d/%m/%Y')})" for w in semanas_lista]
+    index_actual = next((idx for idx, w in enumerate(semanas_lista) if w[2] == semana_actual_epi), 0)
+
+    with tab_cons:
+        semana_consulta = st.selectbox("Seleccione una semana para verificar personal disponible:", opciones_futuras, index=index_actual)
+        if semana_consulta:
+            sem_sel = semanas_lista[opciones_futuras.index(semana_consulta)]
+            reg_sem_sel = df_d[df_d["Semana_Inicio"] == sem_sel[0].strftime("%Y-%m-%d")] if not df_d.empty else pd.DataFrame()
+            if not reg_sem_sel.empty:
+                st.markdown(f"#### 🛡️ Equipo Asignado para la **S.E. {sem_sel[2]}**")
+                integrantes = [i for i in str(reg_sem_sel.iloc[0]["Integrantes"]).split(";") if i.strip()]
+                cargos = [c for c in str(reg_sem_sel.iloc[0]["Cargos"]).split(";") if c.strip()]
+                if integrantes:
+                    cols = st.columns(len(integrantes))
+                    for i, nombre in enumerate(integrantes): 
+                        cols[i].info(f"👤 **{nombre}**\n\n💼 *{cargos[i] if i < len(cargos) else 'Asignado'}*")
+                lab_resp, lab_cargo = str(reg_sem_sel.iloc[0]["Laboratorio_Responsable"]).strip(), str(reg_sem_sel.iloc[0]["Laboratorio_Cargo"]).strip()
+                if lab_resp and lab_resp not in ["nan", ""]:
+                    st.markdown("**🔬 Laboratorio de Salud Pública (LSP):**")
+                    st.success(f"🧫 **{lab_resp}** \n*{lab_cargo if lab_cargo else 'Apoyo Analítico'}*")
+            else:
+                st.info("No se han estructurado turnos para la semana epidemiológica seleccionada.")
+
+    if tab_adm is not None:
+        with tab_adm:
+            semana_registro = st.selectbox("Semana epidemiológica a estructurar:", opciones_futuras, index=index_actual, key="reg_sem_combo")
+            lunes_reg_str = semanas_lista[opciones_futuras.index(semana_registro)][0].strftime("%Y-%m-%d")
+            lista_pre_integrantes, lista_pre_cargos, val_pre_lab_nombre, val_pre_lab_cargo = [], [], "", "Coordinador de Enlace LSP"
+            
+            if not df_d.empty:
+                reg_existente = df_d[df_d["Semana_Inicio"] == lunes_reg_str]
+                if not reg_existente.empty:
+                    lista_pre_integrantes = [i.strip() for i in str(reg_existente.iloc[0]["Integrantes"]).split(";") if i.strip()]
+                    lista_pre_cargos = [c.strip() for c in str(reg_existente.iloc[0]["Cargos"]).split(";") if c.strip()]
+                    val_pre_lab_nombre, val_pre_lab_cargo = str(reg_existente.iloc[0]["Laboratorio_Responsable"]), str(reg_existente.iloc[0]["Laboratorio_Cargo"])
+
+            num_integrantes = st.number_input("¿Cuántos integrantes asignará para Vigilancia? (Máx 9):", min_value=1, max_value=9, value=int(len(lista_pre_integrantes) if lista_pre_integrantes else 2))
+            int_nombres, int_cargos = [], []
+            cols_inputs = st.columns(3)
+            for x in range(int(num_integrantes)):
+                with cols_inputs[x % 3]:
+                    indice_previo = LISTA_RESPONSABLES.index(lista_pre_integrantes[x]) if x < len(lista_pre_integrantes) and lista_pre_integrantes[x] in LISTA_RESPONSABLES else 0
+                    nom = st.selectbox(f"Funcionario {x+1}:", LISTA_RESPONSABLES, index=indice_previo, key=f"f_p_{x}")
+                    car = st.text_input(f"Cargo / Rol {x+1}:", value=lista_pre_cargos[x] if x < len(lista_pre_cargos) else "Profesional Universitario VSP", key=f"c_p_{x}")
+                    if nom != "Seleccione...": 
+                        int_nombres.append(nom); int_cargos.append(car)
+            
+            txt_lab_nom = st.text_input("Responsable de Laboratorio de Salud Pública:", value=val_pre_lab_nombre)
+            txt_lab_car = st.text_input("Cargo / Rol de Laboratorio:", value=val_pre_lab_cargo)
+            
+            if st.button("💾 Guardar Estructura de Turno"):
+                if len(int_nombres) != len(set(int_nombres)): 
+                    st.error("🚨 Asignación Inválida: No se puede registrar al mismo funcionario más de una vez en el mismo equipo.")
+                else:
+                    if not df_d.empty: 
+                        df_d = df_d[df_d["Semana_Inicio"] != lunes_reg_str]
+                    nuevo_turno = pd.DataFrame([{"Semana_Inicio": lunes_reg_str, "Integrantes": ";".join(int_nombres), "Cargos": ";".join(int_cargos), "Laboratorio_Responsable": txt_lab_nom.strip(), "Laboratorio_Cargo": txt_lab_car.strip()}])
+                    guardar_datos(pd.concat([df_d, nuevo_turno], ignore_index=True), 'Disponibilidad')
+                    st.session_state["mensaje_exito_temp"] = "🎉 ¡Turno epidemiológico publicado exitosamente!"
+                    st.rerun()
+
+def vista_compromisos_tecnicos():
+    st.markdown("### 📋 Gestión Avanzada de Compromisos Técnicos e Institucionales")
+    df_cv = cargar_datos('Compromisos')
+    
+    # Coordinadores e investigadores pueden editar compromisos, pero borrar es exclusivo del admin
+    if st.session_state["rol_conectado"] == "Administrador Total":
+        t_matriz, t_crear, t_editar = st.tabs(["📋 Matriz de Seguimiento", "📌 Asignar Nuevo Compromiso", "🔄 Responder / Adjuntar Soporte"])
+    else:
+        t_matriz, t_crear, t_editar = st.tabs(["📋 Matriz de Seguimiento", "📌 Asignar Nuevo Compromiso", "🔄 Responder / Adjuntar Soporte"])
+    
+    with t_matriz:
+        if not df_cv.empty:
+            df_mostrar = df_cv.copy()
+            df_mostrar["Alerta"] = df_mostrar.apply(calcular_semaforo_compromiso, axis=1)
+            st.dataframe(df_mostrar[["Fecha_Acuerdo", "Responsable", "Compromiso", "Plazo", "Estado", "Alerta", "Respuesta_Avance"]], use_container_width=True, hide_index=True)
+            
+            st.markdown("---")
+            st.markdown("#### 📂 Visor de Evidencias / Soportes Oficiales")
+            df_con_soporte = df_mostrar[df_mostrar["Ruta_Soporte"] != ""]
+            if not df_con_soporte.empty:
+                opciones_descarga = [f"{idx} - Tarea de {row['Responsable']} ({row['Fecha_Acuerdo']})" for idx, row in df_con_soporte.iterrows()]
+                comp_elegido = st.selectbox("Seleccione soporte digital para descargar:", opciones_descarga)
+                if comp_elegido:
+                    ruta_archivo = df_con_soporte.loc[int(comp_elegido.split(" - ")[0]), "Ruta_Soporte"]
+                    if os.path.exists(ruta_archivo):
+                        with open(ruta_archivo, "rb") as f_archivo: 
+                            st.download_button(label=f"📥 Documento ({os.path.basename(ruta_archivo)})", data=f_archivo.read(), file_name=os.path.basename(ruta_archivo), use_container_width=True)
+            
+            if st.session_state["rol_conectado"] == "Administrador Total":
+                st.markdown("<br>", unsafe_allow_html=True)
+                with st.expander("🗑️ Depuración de Compromisos (Exclusivo Administrador)"):
+                    df_cv_del = df_cv.copy()
+                    df_cv_del['ID_Fila'] = range(len(df_cv_del))
+                    df_cv_del['Resumen'] = df_cv_del['Fecha_Acuerdo'].astype(str) + " - " + df_cv_del['Responsable'] + " (" + df_cv_del['Compromiso'].str.slice(0, 40) + "...)"
+                    
+                    opcion_borrar = st.selectbox("Seleccione el compromiso que desea eliminar permanentemente:", ["Seleccione..."] + df_cv_del['Resumen'].tolist())
+                    if opcion_borrar != "Seleccione..." and st.button("❌ ELIMINAR COMPROMISO DEFINITIVAMENTE", type="primary"):
+                        idx_eliminar = df_cv_del[df_cv_del['Resumen'] == opcion_borrar]['ID_Fila'].values[0]
+                        df_final_comp = df_cv.drop(df_cv.index[idx_eliminar])
+                        guardar_datos(df_final_comp, 'Compromisos')
+                        st.session_state["mensaje_exito_temp"] = "🗑️ Compromiso eliminado correctamente de la base de datos Excel."
+                        st.rerun()
+        else: 
+            st.info("No hay compromisos en la base de datos.")
+
+    with t_crear:
+        with st.form("form_comp", clear_on_submit=True):
+            f_acuerdo = st.date_input("Fecha del Acuerdo/Acta", value=datetime.today())
+            f_compro = st.text_area("Descripción Detallada del Compromiso:")
+            f_resp_c = st.selectbox("Funcionario Responsable:", LISTA_RESPONSABLES, key="f_resp_c")
+            f_plazo = st.date_input("Fecha Límite de Entrega:", value=datetime.today() + timedelta(days=5))
+            btn_crear_c = st.form_submit_button("📌 Registrar Compromiso Técnico")
+            
+        if btn_crear_c:
+            if f_compro.strip() == "" or "Seleccione..." in f_resp_c:
+                st.error("❌ Error: La descripción del compromiso y el funcionario responsable son obligatorios.")
+            else:
+                nuevo_c = pd.DataFrame([{"Fecha_Acuerdo": f_acuerdo.strftime("%Y-%m-%d"), "Compromiso": f_compro, "Responsable": f_resp_c, "Plazo": f_plazo.strftime("%Y-%m-%d"), "Estado": "🔴 PENDIENTE", "Respuesta_Avance": "", "Ruta_Soporte": ""}])
+                guardar_datos(pd.concat([df_cv, nuevo_c], ignore_index=True), 'Compromisos')
+                st.session_state["mensaje_exito_temp"] = "📌 ¡Compromiso técnico guardado y asignado exitosamente!"
+                st.rerun()
+
+    with t_editar:
+        if not df_cv.empty:
+            comp_editar_list = [f"{idx} - Encomendado a {row['Responsable']} ({row['Fecha_Acuerdo']})" for idx, row in df_cv.iterrows()]
+            sel_c_edit = st.selectbox("Seleccione el compromiso a actualizar:", comp_editar_list)
+            if sel_c_edit:
+                idx_edit = int(sel_c_edit.split(" - ")[0])
+                fila_c = df_cv.loc[idx_edit]
+                f_estado_edit = st.selectbox("Actualizar Estado Operativo:", ["🔴 PENDIENTE", "🟢 CUMPLIDO / FINALIZADO"])
+                ruta_almacenada = str(fila_c.get('Ruta_Soporte', ''))
+                
+                archivo_cargado = st.file_uploader("Arrastra aquí el soporte digital / Acta firmada:", type=["pdf", "jpg", "png", "docx"]) if f_estado_edit == "🟢 CUMPLIDO / FINALIZADO" else None
+                f_avance_edit = st.text_area("Acciones de Avance / Justificación Técnico:", value=str(fila_c['Respuesta_Avance']))
+                
+                if st.button("💾 Guardar Cambios"):
+                    if archivo_cargado is not None:
+                        nombre_final_archivo = f"soporte_comp_{idx_edit}.{archivo_cargado.name.split('.')[-1]}"
+                        ruta_completa_destino = os.path.join(CARPETA_SOPORTES, nombre_final_archivo)
+                        with open(ruta_completa_destino, "wb") as f: 
+                            f.write(archivo_cargado.getbuffer())
+                        ruta_almacenada = ruta_completa_destino
+                    
+                    df_cv.at[idx_edit, 'Estado'] = f_estado_edit
+                    df_cv.at[idx_edit, 'Respuesta_Avance'] = f_avance_edit
+                    df_cv.at[idx_edit, 'Ruta_Soporte'] = ruta_almacenada
+                    guardar_datos(df_cv, 'Compromisos')
+                    st.session_state["mensaje_exito_temp"] = "🔄 ¡Compromiso técnico actualizado con éxito!"
+                    st.rerun()
+
+def vista_enlaces_hc():
+    st.markdown("### 🛠️ Herramientas de Gestión Externa e Institucional")
+    col_hc, col_gf = st.columns(2)
+    with col_hc:
+        st.markdown("<div class='tool-container'>", unsafe_allow_html=True)
+        st.subheader("📨 Solicitud Oficial de Documentos")
+        
+        t_nueva_sol, t_hist_sol = st.tabs(["📨 Nueva Solicitud", "📂 Historial y Seguimiento"])
+        
+        with t_nueva_sol:
+            shc_municipio = st.selectbox("Seleccione Municipio:", LISTA_MUNICIPIOS, key="shc_mun")
+            shc_tipo_solicitud = st.selectbox("Tipo de Solicitud:", ["Historia Clínica", "Acta de Defunción", "Ficha Epidemiológica", "Resumen de Historia Clínica", "Otro"])
+            shc_paciente = st.text_input("Nombre Completo o Iniciales del Paciente:", placeholder="Ej: Juan Perez / J.A.P.M")
+            c_p1, c_p2 = st.columns(2)
+            shc_tipo_id = c_p1.selectbox("Tipo Doc:", ["C.C.", "T.I.", "R.C.", "P.E.P.", "C.E.", "S.I."])
+            shc_num_id = c_p2.text_input("Número ID:")
+            shc_eapb = st.text_input("EAPB / Aseguradora / Entidad:", placeholder="Ej: Coosalud / Hospital Local")
+            c_f1, c_f2 = st.columns(2)
+            shc_f_inicio = c_f1.date_input("Atención Desde:", value=datetime.today() - timedelta(days=7))
+            shc_f_fin = c_f2.date_input("Atención Hasta:", value=datetime.today())
+            shc_motivo = st.text_area("Motivo de la Solicitud:", placeholder="Ej: Ingreso por posible caso de Dengue Grave. Requiere análisis por comité.")
+            
+            shc_correo_dest = st.text_input("Correo Institucional de Destino:", value=CORREO_DESTINO_HC)
+            
+            cuerpo_correo = f"Cordial saludo,\n\nPor medio de la presente se solicita de manera urgente copia de {shc_tipo_solicitud.upper()} del paciente {shc_paciente} con identificación {shc_tipo_id} N° {shc_num_id}, afiliado/atendido en {shc_eapb} en el municipio de {shc_municipio}, correspondiente al período del {shc_f_inicio.strftime('%d/%m/%Y')} al {shc_f_fin.strftime('%d/%m/%Y')}.\n\nMOTIVO DE LA SOLICITUD:\n{shc_motivo}\n\nAgradecemos su pronta gestión.\n\nAtentamente,\nSubprograma de Vigilancia en Salud Pública (VSP) - Gobernación de Sucre."
+            asunto_correo = f"SOLICITUD URGENTE: {shc_tipo_solicitud.upper()} - {shc_municipio.upper()} ({shc_paciente})"
+            
+            # El botón solo se habilitará si se escoge municipio y se digita un nombre
+            if shc_municipio != "Seleccione..." and shc_paciente.strip() != "": 
+                if st.button("🚀 Enviar y Registrar Automáticamente", use_container_width=True, type="primary"):
+                    exito, msg_err = enviar_correo_outlook(shc_correo_dest, asunto_correo, cuerpo_correo)
+                    if exito:
+                        df_sol = cargar_datos('Solicitudes_Externas')
+                        nueva_sol = pd.DataFrame([{
+                            "Fecha_Solicitud": datetime.today().strftime("%Y-%m-%d"),
+                            "Tipo_Solicitud": shc_tipo_solicitud,
+                            "Paciente": shc_paciente.upper(),
+                            "Identificacion": f"{shc_tipo_id} {shc_num_id}",
+                            "EAPB": shc_eapb.upper(),
+                            "Municipio": shc_municipio,
+                            "Responsable_Solicitud": st.session_state.get("usuario_conectado", "Desconocido"),
+                            "Estado": "🔴 PENDIENTE",
+                            "Ruta_Documento": ""
+                        }])
+                        guardar_datos(pd.concat([df_sol, nueva_sol], ignore_index=True), 'Solicitudes_Externas')
+                        st.session_state["mensaje_exito_temp"] = "✅ ¡El correo ha sido enviado y la solicitud registrada en el historial!"
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Error al enviar. Verifica la configuración en '.streamlit/secrets.toml'. Detalle: {msg_err}")
+                        
+        with t_hist_sol:
+            df_solicitudes = cargar_datos('Solicitudes_Externas')
+            if not df_solicitudes.empty:
+                pendientes = len(df_solicitudes[df_solicitudes['Estado'] == '🔴 PENDIENTE'])
+                recibidas = len(df_solicitudes[df_solicitudes['Estado'] == '🟢 RECIBIDO'])
+                st.markdown(f"**Total Solicitudes:** {len(df_solicitudes)} | **Pendientes:** {pendientes} | **Recibidas:** {recibidas}")
+                
+                # Resumen visual
+                st.dataframe(df_solicitudes[["Fecha_Solicitud", "Tipo_Solicitud", "Paciente", "EAPB", "Estado"]], use_container_width=True, hide_index=True)
+                
+                st.markdown("---")
+                st.markdown("#### 🔄 Recepción de Documentos")
+                opciones_pacientes = ["Seleccione un paciente..."] + [f"{idx} - {row['Paciente']} ({row['Tipo_Solicitud']} | {row['Estado']})" for idx, row in df_solicitudes.iterrows()]
+                paciente_sel = st.selectbox("Seleccione el paciente para adjuntar su historia médica:", opciones_pacientes)
+                
+                if paciente_sel != "Seleccione un paciente...":
+                    idx_p = int(paciente_sel.split(" - ")[0])
+                    fila_p = df_solicitudes.loc[idx_p]
+                    
+                    if fila_p['Estado'] == "🟢 RECIBIDO" and str(fila_p.get('Ruta_Documento', '')) != "":
+                        ruta_hc = fila_p['Ruta_Documento']
+                        if os.path.exists(ruta_hc):
+                            with open(ruta_hc, "rb") as f_hc:
+                                st.download_button(f"📥 Descargar {fila_p['Tipo_Solicitud']} (Recibido)", data=f_hc.read(), file_name=os.path.basename(ruta_hc), use_container_width=True)
+                        else:
+                            st.warning("⚠️ Archivo no encontrado en el servidor físico.")
+                    
+                    st.markdown("**Cargar Documento Recibido:**")
+                    hc_file = st.file_uploader("Adjuntar PDF o Imagen remitida por la EAPB:", type=["pdf", "jpg", "png", "jpeg"], key=f"up_hc_{idx_p}")
+                    if st.button("💾 Guardar Documento y Cerrar Solicitud", use_container_width=True):
+                        if hc_file is not None:
+                            os.makedirs(CARPETA_SOPORTES, exist_ok=True)
+                            nombre_hc = f"HC_{idx_p}_{datetime.today().strftime('%Y%m%d%H%M')}.{hc_file.name.split('.')[-1]}"
+                            ruta_final_hc = os.path.join(CARPETA_SOPORTES, nombre_hc)
+                            with open(ruta_final_hc, "wb") as f:
+                                f.write(hc_file.getbuffer())
+                            
+                            df_solicitudes.at[idx_p, 'Estado'] = "🟢 RECIBIDO"
+                            df_solicitudes.at[idx_p, 'Ruta_Documento'] = ruta_final_hc
+                            guardar_datos(df_solicitudes, 'Solicitudes_Externas')
+                            st.session_state["mensaje_exito_temp"] = "✅ ¡Documento médico almacenado y solicitud cerrada con éxito!"
+                            st.rerun()
+                        else:
+                            st.error("❌ Por favor adjunta un archivo antes de guardar.")
+            else:
+                st.info("No hay solicitudes médicas registradas en el historial.")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+    with col_gf:
+        st.markdown("<div class='tool-container'>", unsafe_allow_html=True)
+        
+        herramienta_sel = st.radio("Selecciona una herramienta:", ["🌐 Asistencia Google Forms", "🎥 Salas Virtuales Teams"], horizontal=True, label_visibility="collapsed")
+        
+        if herramienta_sel == "🎥 Salas Virtuales Teams":
+            st.subheader("🌐 Solicitud de Salas Virtuales (Teams)")
+            
+            tab_sol_teams, tab_hist_teams = st.tabs(["🎫 Solicitar Sala", "📋 Historial y Enlaces"])
+            
+            with tab_sol_teams:
+                gf_tema = st.text_input("Tema Central de la Reunión/Evento:", placeholder="Ej: Sala Situacional Dengue")
+                c_ft1, c_ft2, c_ft3 = st.columns(3)
+                gf_fecha = c_ft1.date_input("Fecha Programada del Evento:", value=datetime.today(), key="gf_fecha_v")
+                gf_hora_inicio = c_ft2.time_input("Hora de Inicio:", value=datetime.strptime("08:00", "%H:%M").time(), key="gf_hora_v")
+                gf_hora_fin = c_ft3.time_input("Hora Final:", value=datetime.strptime("10:00", "%H:%M").time(), key="gf_hora_fin_v")
+                gf_resp = st.selectbox("Funcionario Responsable / Ponente:", LISTA_RESPONSABLES, key="gf_resp_v")
+                
+                st.markdown("---")
+                gf_correo_encargado = st.text_input("Correo del Funcionario Encargado de Crear Links:", placeholder="Ej: sistemas@gobernacion.gov.co")
+                
+                if st.button("🚀 Enviar Solicitud de Sala", use_container_width=True, type="primary"):
+                    if "Seleccione..." in [gf_resp] or gf_tema.strip() == "" or gf_correo_encargado.strip() == "":
+                        st.error("❌ Por favor completa todos los campos (Tema, Responsable y Correo del Encargado).")
+                    else:
+                        asunto_teams = f"NUEVA SOLICITUD DE SALA TEAMS: {gf_tema.upper()}"
+                        cuerpo_teams = f"Cordial saludo,\n\nSe requiere la programación urgente de una sala virtual de Teams.\n\nDETALLES DEL EVENTO:\n- Tema: {gf_tema}\n- Fecha: {gf_fecha.strftime('%d/%m/%Y')}\n- Horario: {gf_hora_inicio.strftime('%I:%M %p')} a {gf_hora_fin.strftime('%I:%M %p')}\n- Ponente Responsable: {gf_resp}\n\nPor favor ingresar al Sistema VSP, dirigirse a la pestaña de 'Herramientas de Gestión' -> 'Historial y Enlaces', y asignar el link correspondiente a esta solicitud.\n\nAtentamente,\nSistema Automatizado VSP"
+                        
+                        exito_t, msg_t = enviar_correo_outlook(gf_correo_encargado, asunto_teams, cuerpo_teams)
+                        
+                        if exito_t:
+                            df_teams = cargar_datos('Solicitudes_Teams')
+                            nueva_sol_t = pd.DataFrame([{
+                                "Fecha_Solicitud": datetime.today().strftime("%Y-%m-%d"),
+                                "Fecha_Evento": f"{gf_fecha.strftime('%Y-%m-%d')} ({gf_hora_inicio.strftime('%H:%M')} a {gf_hora_fin.strftime('%H:%M')})",
+                                "Tema": gf_tema.upper(),
+                                "Responsable_Evento": gf_resp,
+                                "Encargado_Links": gf_correo_encargado,
+                                "Estado": "🔴 PENDIENTE",
+                                "Enlace_Teams": ""
+                            }])
+                            guardar_datos(pd.concat([df_teams, nueva_sol_t], ignore_index=True), 'Solicitudes_Teams')
+                            st.session_state["mensaje_exito_temp"] = "✅ ¡Solicitud enviada al encargado y registrada en el historial!"
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Error al notificar al encargado. Detalle: {msg_t}")
+                            
+            with tab_hist_teams:
+                df_teams = cargar_datos('Solicitudes_Teams')
+                if not df_teams.empty:
+                    # Mostrar tabla con estado
+                    st.dataframe(df_teams[["Fecha_Evento", "Tema", "Responsable_Evento", "Estado"]], use_container_width=True, hide_index=True)
+                    
+                    st.markdown("---")
+                    st.markdown("#### 🔗 Asignación de Links (Para uso del Encargado)")
+                    pendientes_t = df_teams[df_teams["Estado"] == "🔴 PENDIENTE"]
+                    if not pendientes_t.empty:
+                        opciones_asig = ["Seleccione una solicitud..."] + [f"{idx} - {row['Tema']} ({row['Fecha_Evento']})" for idx, row in pendientes_t.iterrows()]
+                        sala_sel = st.selectbox("Seleccione la solicitud para asignarle el link:", opciones_asig)
+                        
+                        if sala_sel != "Seleccione una solicitud...":
+                            idx_sala = int(sala_sel.split(" - ")[0])
+                            link_ingresado = st.text_input("Pegue aquí el enlace de Microsoft Teams:")
+                            
+                            if st.button("💾 Guardar y Asignar Enlace", use_container_width=True):
+                                if link_ingresado.strip() == "":
+                                    st.error("❌ El enlace no puede estar vacío.")
+                                else:
+                                    df_teams.at[idx_sala, 'Estado'] = "🟢 ASIGNADO"
+                                    df_teams.at[idx_sala, 'Enlace_Teams'] = link_ingresado.strip()
+                                    guardar_datos(df_teams, 'Solicitudes_Teams')
+                                    st.session_state["mensaje_exito_temp"] = "✅ ¡Enlace de Teams asignado exitosamente!"
+                                    st.rerun()
+                    else:
+                        st.info("✅ No hay salas virtuales pendientes por asignar.")
+                        
+                    st.markdown("---")
+                    st.markdown("#### 📋 Copiar Enlaces Asignados")
+                    asignadas_t = df_teams[df_teams["Estado"] == "🟢 ASIGNADO"]
+                    if not asignadas_t.empty:
+                        for idx, row in asignadas_t.iterrows():
+                            st.success(f"**{row['Tema']}** ({row['Fecha_Evento']} | {row['Responsable_Evento']})\n\n🔗 `{row['Enlace_Teams']}`")
+                            st.link_button("🌍 Unirse a la Sala", row['Enlace_Teams'], use_container_width=True)
+                            
+                    if st.session_state["rol_conectado"] == "Administrador Total":
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        with st.expander("🗑️ Depuración de Salas (Administrador)"):
+                            opciones_borrar_t = ["Seleccione una sala para eliminar..."] + [f"{idx} - {row['Tema']} ({row['Fecha_Evento']})" for idx, row in df_teams.iterrows()]
+                            sala_a_borrar = st.selectbox("Sala a eliminar:", opciones_borrar_t)
+                            if sala_a_borrar != "Seleccione una sala para eliminar...":
+                                idx_del_t = int(sala_a_borrar.split(" - ")[0])
+                                if st.button("❌ Confirmar Eliminación Definitiva", use_container_width=True):
+                                    df_teams_actualizado = df_teams.drop(df_teams.index[idx_del_t])
+                                    guardar_datos(df_teams_actualizado, 'Solicitudes_Teams')
+                                    st.session_state["mensaje_exito_temp"] = "🗑️ Sala eliminada del historial correctamente."
+                                    st.rerun()
+                else:
+                    st.info("No se han registrado solicitudes de salas virtuales.")
+        else:
+            st.subheader("🌐 Enlaces para Asistencia de Eventos Virtuales")
+            
+            tab_generar, tab_historial = st.tabs(["🚀 Generar Nuevo Enlace", "📋 Historial de Enlaces y Descargas"])
+            
+            with tab_generar:
+                gf_evento = st.selectbox("Tipo de Evento Virtual:", LISTA_TIPOS_EVENTO, key="gf_tipo_v2")
+                gf_tema = st.text_input("Tema Central del Evento:", placeholder="Ej: SAR Dengue", key="gf_tema_v2")
+                gf_resp = st.selectbox("Funcionario Responsable / Ponente:", LISTA_RESPONSABLES, key="gf_resp_v2")
+                gf_fecha = st.date_input("Fecha Programada del Evento:", value=datetime.today(), key="gf_fecha_v2")
+                
+                btn_generar_link = st.button("🚀 Procesar y Guardar en Bitácora", use_container_width=True, type="primary", key="btn_gen_v2")
+                
+                if btn_generar_link:
+                    if "Seleccione..." in [gf_evento, gf_resp] or gf_tema.strip() == "":
+                        st.error("❌ Por favor completa todos los campos obligatorios para procesar los enlaces.")
+                    else:
+                        url_limpia = BASE_GOOGLE_FORMS.split("?")[0]
+                        # Generamos un tema único concatenando la fecha, así evitamos cruce de asistencias en Excel
+                        tema_unico = f"{gf_tema.upper().strip()} ({gf_fecha.strftime('%d-%m-%Y')})"
+                        link_generado = f"{url_limpia}?usp=pp_url&{ID_TEMA_FORM}={urllib.parse.quote(tema_unico)}"
+                        
+                        df_historial = cargar_datos('Historial_Enlaces')
+                        nuevo_registro = pd.DataFrame([{
+                            "Fecha_Registro": gf_fecha.strftime("%Y-%m-%d"),
+                            "Tipo_Evento": gf_evento,
+                            "Tema_Evento": tema_unico,
+                            "Responsable_Ponente": gf_resp,
+                            "Enlace_Formulario": link_generado
+                        }])
+                        guardar_datos(pd.concat([df_historial, nuevo_registro], ignore_index=True), 'Historial_Enlaces')
+                        
+                        st.session_state["mensaje_exito_temp"] = "🎉 ¡Enlace generado con éxito e indexado en la bitácora!"
+                        st.rerun()
+                        
+            with tab_historial:
+                df_historial = cargar_datos('Historial_Enlaces')
+                if not df_historial.empty:
+                    busqueda = st.text_input("🔍 Buscar en la bitácora (Filtra por Tema, Ponente o Tipo):")
+                    if busqueda:
+                        mask = df_historial.astype(str).apply(lambda col: col.str.contains(busqueda, case=False, na=False)).any(axis=1)
+                        df_historial = df_historial[mask]
+                    
+                    if not df_historial.empty:
+                        st.dataframe(df_historial[["Fecha_Registro", "Tipo_Evento", "Tema_Evento", "Responsable_Ponente"]], use_container_width=True, hide_index=True)
+                        opciones_combo = ["Seleccione un evento..."] + [f"{idx} - {row['Tema_Evento']} [{row['Fecha_Registro']}]" for idx, row in df_historial.iterrows()]
+                        seleccion_registro = st.selectbox("Seleccione un evento para recuperar sus accesos:", opciones_combo)
+                        
+                        if seleccion_registro != "Seleccione un evento...":
+                            idx_h = int(seleccion_registro.split(" - ")[0])
+                            fila_h = df_historial.iloc[idx_h]
+                            tema_sel_vsp = str(fila_h["Tema_Evento"]).strip()
+                            
+                            st.markdown("#### 🔗 Enlace para Responder (Compartir)")
+                            st.code(fila_h["Enlace_Formulario"], language="markdown")
+                            st.link_button("🌍 Abrir Formulario en Línea", fila_h["Enlace_Formulario"], use_container_width=True)
+                            
+                            st.markdown("---")
+                            st.markdown("#### 📥 Enlace de Descarga de Respuestas a Excel")
+                            
+                            if URL_GOOGLE_SHEET and "docs.google.com/spreadsheets" in URL_GOOGLE_SHEET and URL_GOOGLE_SHEET != "TU_LINK_DE_GOOGLE_SHEETS_AQUI":
+                                try:
+                                    base_sheet_url = URL_GOOGLE_SHEET.split("/edit")[0]
+                                    export_url = f"{base_sheet_url}/export?format=csv"
+                                    df_all = pd.read_csv(export_url).fillna("")
+                                    
+                                    mask = df_all.astype(str).apply(lambda x: x.str.upper().str.contains(tema_sel_vsp.upper())).any(axis=1)
+                                    df_filtrado = df_all[mask]
+                                    
+                                    if not df_filtrado.empty:
+                                        st.success(f"✅ ¡Se detectaron {len(df_filtrado)} participantes registrados en la nube!")
+                                        with st.expander("👁️ Ver Vista Previa de Asistentes"):
+                                            st.dataframe(df_filtrado, use_container_width=True)
+                                        df_a_descargar = df_filtrado
+                                    else:
+                                        st.info(f"ℹ️ Aún no hay respuestas en la nube para '{tema_sel_vsp}'. El botón generará el formato con los encabezados oficiales.")
+                                        df_a_descargar = pd.DataFrame(columns=df_all.columns)
+                                    
+                                    buffer_excel = io.BytesIO()
+                                    with pd.ExcelWriter(buffer_excel, engine='openpyxl') as wr:
+                                        df_a_descargar.to_excel(wr, index=False, sheet_name='Asistencia_Filtrada')
+                                    
+                                    st.download_button(
+                                        label=f"📥 Descargar Archivo Excel de: {tema_sel_vsp} (.xlsx)",
+                                        data=buffer_excel.getvalue(),
+                                        file_name=f"asistencias_{tema_sel_vsp.replace(' ', '_')}_{datetime.today().strftime('%Y%m%d')}.xlsx",
+                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                        use_container_width=True
+                                    )
+                                except Exception as e:
+                                    st.error(f"Error de conexión con Google Sheets: {e}")
+                            else:
+                                st.info("⚠️ Para habilitar la descarga automatizada, pegue el link público de su Google Sheet en la constante `URL_GOOGLE_SHEET` (Línea 41).")
+                            
+                            if st.session_state["rol_conectado"] == "Administrador Total":
+                                st.markdown("<br>", unsafe_allow_html=True)
+                                with st.expander("🗑️ Depuración de Enlaces (Administrador)"):
+                                    if st.button("❌ Confirmar Eliminación Definitiva del Enlace", key=f"btn_del_link_{idx_h}", use_container_width=True):
+                                        df_historial_actualizado = df_historial.drop(df_historial.index[idx_h])
+                                        guardar_datos(df_historial_actualizado, 'Historial_Enlaces')
+                                        st.session_state["mensaje_exito_temp"] = "🗑️ Enlace eliminado de la bitácora correctamente."
+                                        st.rerun()
+                                        
+                    else:
+                        st.info("No se encontraron coincidencias para la búsqueda.")
+                else:
+                    st.info("Bitácora vacía. Genere un nuevo enlace para iniciar el historial.")
+                    
+            if not df_historial.empty:
+                st.markdown("---")
+                st.markdown("#### 📄 Exportación para Informe de Empalme")
+                st.caption("Genera un reporte consolidado de todos los enlaces estructurados para rendición de cuentas.")
+                buffer_empalme = io.BytesIO()
+                with pd.ExcelWriter(buffer_empalme, engine='openpyxl') as wr:
+                    df_historial.to_excel(wr, index=False, sheet_name='Historial_Asistencias_VSP')
+                st.download_button(
+                    label="📥 Exportar Historial Completo para Informe de Empalme",
+                    data=buffer_empalme.getvalue(),
+                    file_name=f"historial_asistencias_empalme_{datetime.today().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+
+def vista_actas_informes():
+    st.markdown("### 📄 Módulo Documental de Actas e Informes de Gestión (VSP)")
+    df_actas = cargar_datos('Actas')
+    t_ver_actas, t_crear_acta = st.tabs(["🔍 Historial de Actas Radicadas", "📝 Generar Nueva Acta / Minuta"])
+    
+    with t_ver_actas:
+        if not df_actas.empty:
+            st.dataframe(df_actas, use_container_width=True, hide_index=True)
+            st.markdown("---")
+            st.markdown("#### 📥 Visualizar / Descargar Acta Radicada")
+            fila_sel = st.selectbox("Seleccione acta para descargar su documento o ver su minuta:", range(len(df_actas)), format_func=lambda x: f"Acta {df_actas.iloc[x]['Fecha_Acta']} - {df_actas.iloc[x]['Tipo_Comite']}")
+            if fila_sel is not None:
+                acta = df_actas.iloc[fila_sel]
+                ruta_doc = acta.get("Ruta_Documento", "")
+                if pd.notna(ruta_doc) and str(ruta_doc).strip() != "" and os.path.exists(str(ruta_doc)):
+                    with open(str(ruta_doc), "rb") as f:
+                        st.download_button(label="📥 Descargar Acta Escaneada (Soporte PDF/Word)", data=f.read(), file_name=os.path.basename(str(ruta_doc)), use_container_width=True, type="primary")
+                else:
+                    st.warning("⚠️ No se adjuntó archivo físico para esta acta. A continuación se muestra la minuta digital.")
+                st.text_area("Minuta / Texto para Copiar a Plantilla Institucional:", value=f"ACTA DE REUNIÓN - VSP SUCRE\nFECHA: {acta['Fecha_Acta']}\nINSTANCIA/COMITÉ: {acta['Tipo_Comite']}\nRESPONSABLE: {acta['Responsable_Acta']}\n\nASISTENTES REGISTRADOS:\n{acta['Asistentes']}\n\nDESARROLLO DE LA SESIÓN:\n{acta['Temas']}\n\nCONCLUSIONES Y COMPROMISOS ADOPTADOS:\n{acta['Conclusiones_Compromisos']}", height=250)
+        else: 
+            st.info("No se registran actas ni minutas institucionales en el sistema.")
+
+    with t_crear_acta:
+        with st.form("form_actas", clear_on_submit=True):
+            act_fecha = st.date_input("Fecha de Realización:", value=datetime.today())
+            act_tipo = st.selectbox("Instancia / Comité / Mesa Técnica:", LISTA_TIPOS_EVENTO)
+            act_resp = st.selectbox("Secretario Técnico / Líder del Acta:", LISTA_RESPONSABLES, key="act_resp")
+            act_asistentes = st.text_area("Asistentes (Nombre completo, Entidad, Cargo):", placeholder="Ej: Juan Perez (EAPB Coosalud), Ana Diaz (LSP Sucre)")
+            act_temas = st.text_area("Desarrollo Técnico de los Temas Tratados:")
+            act_conclusiones = st.text_area("Conclusiones Generals y Tareas Específicas:")
+            act_soporte = st.file_uploader("Adjuntar Archivo de Acta Escaneada (PDF, Word, etc.):", type=["pdf", "docx", "jpg", "png"])
+            
+            if st.form_submit_button("💾 Archivar y Registrar Acta Oficial"):
+                if "Seleccione..." in act_resp: 
+                    st.error("Debe definir un funcionario como Secretario Técnico/Responsable del acta.")
+                else:
+                    ruta_soporte = ""
+                    if act_soporte is not None:
+                        os.makedirs(CARPETA_SOPORTES, exist_ok=True)
+                        nombre_archivo = f"ACTA_{act_fecha.strftime('%Y%m%d')}_{act_tipo.replace(' ', '_')}.{act_soporte.name.split('.')[-1]}"
+                        ruta_soporte = os.path.join(CARPETA_SOPORTES, nombre_archivo)
+                        with open(ruta_soporte, "wb") as f:
+                            f.write(act_soporte.getbuffer())
+                    
+                    nueva_acta = pd.DataFrame([{"Fecha_Acta": act_fecha.strftime("%Y-%m-%d"), "Tipo_Comite": act_tipo, "Responsable_Acta": act_resp, "Asistentes": act_asistentes, "Temas": act_temas, "Conclusiones_Compromisos": act_conclusiones, "Ruta_Documento": ruta_soporte}])
+                    guardar_datos(pd.concat([df_actas, nueva_acta], ignore_index=True), 'Actas')
+                    st.session_state["mensaje_exito_temp"] = "🎉 ¡Acta técnica archivada e indexada con éxito!"
+                    st.rerun()
+
+def vista_alertas_inventario():
+    st.markdown("### 🚨 Central de Alertas Epidemiológicas e Insumos Críticos")
+    df_alertas = cargar_datos('Alertas_Inventario')
+    t_alertas, t_insumos = st.tabs(["📢 Circulares y Alertas INS/MinSalud", "🧪 Inventario de Contingencia (LSP)"])
+    
+    with t_alertas:
+        st.markdown("#### 📢 Alertas y Lineamientos Nacionales Activos")
+        df_solo_alertas = df_alertas[df_alertas["Tipo_Item"] == "CIRCULAR_ALERTA"] if not df_alertas.empty else pd.DataFrame()
+        if not df_solo_alertas.empty:
+            for _, fila in df_solo_alertas.iterrows():
+                color_borde = "#ef4444" if "ALTO" in str(fila["Clasificacion_Riesgo"]).upper() else "#eab308" if "MEDIO" in str(fila["Clasificacion_Riesgo"]).upper() else "#3b82f6"
+                st.markdown(f"""
+                <div style='padding:12px; border-radius:8px; background-color:rgba(30,41,59,0.5); margin-bottom:10px; border-left:5px solid {color_borde};'>
+                    <span style='float:right; font-size:0.85em; background-color:rgba(255,255,255,0.1); padding:3px 8px; border-radius:15px;'>📅 {fila['Fecha_Registro']}</span>
+                    <h5 style='margin:0; color:#cbd5e1;'>📢 {fila['Titulo_Nombre']}</h5>
+                    <p style='margin:5px 0 0 0; font-size:0.95em; color:#94a3b8;'>{fila['Descripcion_Cantidad']}</p>
+                    <small style='color:{color_borde}; font-weight:bold;'>Prioridad de Intervención: {fila['Clasificacion_Riesgo']}</small>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Mostrar botón de descarga si existe soporte documental
+                ruta_doc = fila.get("Ruta_Documento", "")
+                if pd.notna(ruta_doc) and str(ruta_doc).strip() != "" and os.path.exists(str(ruta_doc)):
+                    with open(str(ruta_doc), "rb") as f:
+                        btn_descarga = st.download_button(
+                            label="📥 Descargar Circular / Documento Soporte",
+                            data=f,
+                            file_name=os.path.basename(str(ruta_doc)),
+                            key=f"dl_alerta_{_}"
+                        )
+                st.markdown("<br>", unsafe_allow_html=True)
+        else: 
+            st.info("No hay circulares epidemiológicas urgentes en el histórico.")
+        
+        if st.session_state["rol_conectado"] == "Administrador Total" or "🚨 Alertas e Inventario" in st.session_state.get("permisos_conectado", []):
+            with st.expander("➕ Difundir Nueva Circular Externa"):
+                with st.form("form_alertas", clear_on_submit=True):
+                    al_fecha = st.date_input("Fecha Emisión Circular:", value=datetime.today())
+                    al_titulo = st.text_input("Número / Título de la Circular:", placeholder="Ej: Circular 014 INS - Alerta de Dengue")
+                    al_desc = st.text_area("Lineamientos y Directrices Clave:")
+                    al_riesgo = st.select_slider("Prioridad de Respuesta:", options=["Bajo", "Medio", "Alto"])
+                    al_archivo = st.file_uploader("Subir Circular (Opcional, PDF):", type=["pdf", "png", "jpg", "jpeg", "docx"])
+                    
+                    if st.form_submit_button("📢 Publicar y Notificar Alerta"):
+                        ruta_final = ""
+                        if al_archivo:
+                            if not os.path.exists(CARPETA_SOPORTES):
+                                os.makedirs(CARPETA_SOPORTES)
+                            nombre_safe = f"circular_{datetime.now().strftime('%Y%m%d%H%M%S')}_{al_archivo.name.replace(' ', '_')}"
+                            ruta_final = os.path.join(CARPETA_SOPORTES, nombre_safe)
+                            with open(ruta_final, "wb") as f:
+                                f.write(al_archivo.getbuffer())
+                                
+                        nueva_a = pd.DataFrame([{
+                            "Fecha_Registro": al_fecha.strftime("%Y-%m-%d"), 
+                            "Tipo_Item": "CIRCULAR_ALERTA", 
+                            "Titulo_Nombre": al_titulo, 
+                            "Descripcion_Cantidad": al_desc, 
+                            "Clasificacion_Riesgo": al_riesgo.upper(),
+                            "Ruta_Documento": ruta_final
+                        }])
+                        guardar_datos(pd.concat([df_alertas, nueva_a], ignore_index=True), 'Alertas_Inventario')
+                        st.session_state["mensaje_exito_temp"] = "📢 ¡Circular epidemiológica difundida!"
+                        st.rerun()
+
+    with t_insumos:
+        st.markdown("#### 🧪 Insumos Técnicos para Respuesta Contingencial a Brotes")
+        df_solo_insumos = df_alertas[df_alertas["Tipo_Item"] == "INSUMO_LAB"] if not df_alertas.empty else pd.DataFrame()
+        if not df_solo_insumos.empty:
+            st.dataframe(df_solo_insumos[["Fecha_Registro", "Titulo_Nombre", "Descripcion_Cantidad", "Clasificacion_Riesgo"]].rename(columns={"Titulo_Nombre": "Insumo / Kit Técnico", "Descripcion_Cantidad": "Stock Unidades", "Clasificacion_Riesgo": "Código Lote / Ubicación"}), use_container_width=True, hide_index=True)
+        else: 
+            st.info("Sin registros de stock de reactivos o kits de toma de muestras.")
+        
+        if st.session_state["rol_conectado"] == "Administrador Total":
+            with st.expander("➕ Actualizar Stock de Insumos Críticos"):
+                with st.form("form_insumos", clear_on_submit=True):
+                    ins_nombre = st.text_input("Nombre Técnico del Reactivo / Insumo:", placeholder="Ej: Medios de Transporte Viral (MTV)")
+                    ins_cant = st.text_input("Cantidad Disponible:", placeholder="Ej: 200 Unidades")
+                    ins_lote = st.text_input("Lote / Lugar de Almacenamiento:", placeholder="Ej: LOTE-2026X / Nevera Principal LSP")
+                    if st.form_submit_button("💾 Guardar Stock Operativo"):
+                        nuevo_i = pd.DataFrame([{"Fecha_Registro": datetime.today().strftime("%Y-%m-%d"), "Tipo_Item": "INSUMO_LAB", "Titulo_Nombre": ins_nombre, "Descripcion_Cantidad": ins_cant, "Clasificacion_Riesgo": ins_lote}])
+                        guardar_datos(pd.concat([df_alertas, nuevo_i], ignore_index=True), 'Alertas_Inventario')
+                        st.session_state["mensaje_exito_temp"] = "🧪 ¡Inventario de brotes actualizado!"
+                        st.rerun()
+
+def vista_filtros_dashboard():
+    st.subheader("📊 Analítica Gerencial y Filtros de Búsqueda")
+    df_busc = cargar_datos('Eventos')
+    df_comp_dash = cargar_datos('Compromisos')
+    df_h_dash = cargar_datos('Historial_Enlaces')
+    
+    col_dash1, col_dash2 = st.columns(2)
+    with col_dash1:
+        st.markdown("#### 📈 Carga Operativa por Municipios (Eventos)")
+        if not df_busc.empty: st.bar_chart(df_busc["Municipio"].value_counts())
+        else: st.info("No hay datos de eventos.")
+        st.markdown("#### 🏢 Distribución por Espacio Físico")
+        if not df_busc.empty: st.bar_chart(df_busc["Lugar"].value_counts())
+        else: st.info("No hay datos de espacios.")
+    with col_dash2:
+        st.markdown("#### 📋 Balance Operativo de Compromisos Técnicos")
+        if not df_comp_dash.empty:
+            df_comp_dash["Estado_Limpio"] = df_comp_dash["Estado"].apply(lambda x: "FINALIZADO" if "CUMPLIDO" in str(x).upper() or "FINALIZADO" in str(x).upper() else "PENDIENTE")
+            st.bar_chart(df_comp_dash["Estado_Limpio"].value_counts())
+            st.markdown("📊 **Compromisos Totales Asignados por Funcionario**")
+            tabla_resumen = df_comp_dash["Responsable"].value_counts().reset_index()
+            tabla_resumen.columns = ["Funcionario", "Tareas Asignadas"]
+            st.dataframe(tabla_resumen, use_container_width=True, hide_index=True)
+        else: 
+            st.info("No hay datos de compromisos para computar analíticas.")
+            
+    st.markdown("---")
+    st.markdown("### 📊 Indicadores de Asistencias Técnicas y Capacitaciones Virtuales")
+    if not df_h_dash.empty:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("🌐 Enlaces de Asistencia Creados", len(df_h_dash))
+        c2.metric("📋 Tipos de Acciones Únicas", len(df_h_dash["Tipo_Evento"].unique()))
+        c3.metric("👥 Ponentes Activos VSP", len(df_h_dash["Responsable_Ponente"].unique()))
+        st.bar_chart(df_h_dash["Tipo_Evento"].value_counts())
+    else:
+        st.info("No se registran datos históricos de enlaces estructurados para computar métricas.")
+
+# =======================================================
+# NUEVO: PANEL MAESTRO Y DELEGACIÓN DE ROLES (EXCLUSIVO ADMIN)
+# =======================================================
+def vista_panel_maestro():
+    st.subheader("⚙️ Panel Maestro, Depuración y Delegación de Roles")
+    
+    t_roles, t_depurar = st.tabs(["👥 Gestión y Creación de Usuarios", "🗑️ Depuración de Actividades"])
+    
+    with t_roles:
+        st.markdown("#### 📝 Registrar Nuevo Funcionario y Asignar Rol")
+        df_usuarios = cargar_datos('Usuarios')
+        
+        with st.form("form_crear_usuario", clear_on_submit=True):
+            u_login = st.text_input("Nombre de Usuario (Login):", placeholder="Ej: jgarcia")
+            u_pass = st.text_input("Contraseña de Acceso:", type="password")
+            u_nombre = st.text_input("Nombre Completo del Funcionario:")
+            u_rol_sel = st.selectbox("Definir Nivel de Privilegios (Rol):", [
+                "Administrador Total", 
+                "Epidemiólogo de Campo / Coordinador", 
+                "Líder del Programa",
+                "Referente SIVIGILA",
+                "Referente VBC",
+                "Estadísticas Vitales",
+                "Sanidad Portuaria",
+                "Referente",
+                "Apoyo",
+                "Consulta / Invitado",
+                "Otro (Especificar manualmente)"
+            ])
+            if u_rol_sel == "Otro (Especificar manualmente)":
+                u_rol = st.text_input("Escriba el rol personalizado:")
+            else:
+                u_rol = u_rol_sel
+            # Multi-select para los permisos exactos
+            lista_todas_vistas = list(mapeo_vistas.keys()) if 'mapeo_vistas' in globals() else ["🏠 Inicio", "📝 Registrar Actividad", "🛡️ Disponibilidad Semanal", "📋 Compromisos Técnicos", "🛠️ Enlaces y Solicitudes HC", "📄 Actas e Informes", "🚨 Alertas e Inventario", "🔍 Filtros y Dashboard", "⚙️ Panel Maestro y Roles", "🏘️ Vigilancia Comunitaria (VBC)", "📈 Tableros SIVIGILA", "🗺️ Georreferenciación", "🛡️ Calidad del Dato", "📞 Directorio de Red"]
+            u_permisos = st.multiselect("Permisos de Acceso a Módulos:", lista_todas_vistas, default=["🏠 Inicio", "📝 Registrar Actividad"])
+            
+            btn_add_user = st.form_submit_button("👥 Crear y Sincronizar Usuario")
+            
+        if btn_add_user:
+            if u_login.strip() == "" or u_pass.strip() == "" or u_nombre.strip() == "":
+                st.error("❌ Todos los campos son obligatorios.")
+            elif u_login.strip() in df_usuarios["Usuario"].values:
+                st.error("❌ El usuario ya existe.")
+            else:
+                str_permisos = ",".join(u_permisos)
+                nuevo_u = pd.DataFrame([{
+                    "Usuario": u_login.strip().lower(), 
+                    "Contrasena": u_pass.strip(), 
+                    "Nombre_Completo": u_nombre.upper().strip(), 
+                    "Rol": u_rol,
+                    "Permisos": str_permisos
+                }])
+                guardar_datos(pd.concat([df_usuarios, nuevo_u], ignore_index=True), 'Usuarios')
+                st.success(f"🎉 ¡Usuario creado! {u_nombre.upper()} ({u_rol}).")
+                st.rerun()
+                
+        # Editar perfil completo y permisos de usuarios existentes
+        with st.expander("✏️ Editar Perfil y Roles de Usuarios Existentes"):
+            u_edit = st.selectbox("Seleccione el usuario a editar:", df_usuarios["Usuario"].tolist(), key="sel_u_edit")
+            if u_edit:
+                datos_u = df_usuarios[df_usuarios["Usuario"] == u_edit].iloc[0]
+                
+                # Campos de edición
+                e_login = st.text_input("Nombre de Usuario (Login):", value=str(datos_u.get("Usuario", "")))
+                e_nombre = st.text_input("Nombre Completo:", value=str(datos_u.get("Nombre_Completo", "")))
+                e_pass = st.text_input("Nueva Contraseña (dejar igual si no desea cambiar):", value=str(datos_u.get("Contrasena", "")), type="password")
+                
+                rol_actual = str(datos_u.get("Rol", "Consulta / Invitado"))
+                opciones_roles = [
+                    "Administrador Total", "Epidemiólogo de Campo / Coordinador", "Líder del Programa",
+                    "Referente SIVIGILA", "Referente VBC", "Estadísticas Vitales", "Sanidad Portuaria",
+                    "Referente", "Apoyo", "Consulta / Invitado", "Otro (Especificar manualmente)"
+                ]
+                indice_rol = opciones_roles.index(rol_actual) if rol_actual in opciones_roles else opciones_roles.index("Otro (Especificar manualmente)")
+                e_rol_sel = st.selectbox("Rol Principal:", opciones_roles, index=indice_rol)
+                
+                if e_rol_sel == "Otro (Especificar manualmente)":
+                    e_rol = st.text_input("Escriba el rol personalizado:", value=rol_actual if rol_actual not in opciones_roles else "")
+                else:
+                    e_rol = e_rol_sel
+                
+                permisos_actuales = [p.strip() for p in str(datos_u.get("Permisos", "🏠 Inicio,📝 Registrar Actividad")).split(",") if p.strip()]
+                lista_todas_vistas_f = list(mapeo_vistas.keys()) if 'mapeo_vistas' in globals() else ["🏠 Inicio", "📝 Registrar Actividad", "🛡️ Disponibilidad Semanal", "📋 Compromisos Técnicos", "🛠️ Enlaces y Solicitudes HC", "📄 Actas e Informes", "🚨 Alertas e Inventario", "🔍 Filtros y Dashboard", "🚨 Brotes y ERI", "🛑 Tablero de Problemas", "🏘️ Vigilancia Comunitaria (VBC)", "📈 Tableros SIVIGILA", "🛡️ Calidad del Dato", "📞 Directorio de Red", "🤖 Asistente Redactor VSP", "⚙️ Panel Maestro y Roles", "🛡️ Auditoría y Logs"]
+                permisos_actuales = [p for p in permisos_actuales if p in lista_todas_vistas_f]
+                
+                nuevo_permiso = st.multiselect(f"Permisos de Módulos:", lista_todas_vistas_f, default=permisos_actuales, key=f"ms_{u_edit}")
+                
+                if st.button("💾 Guardar Cambios del Usuario"):
+                    idx_u = df_usuarios.index[df_usuarios["Usuario"] == u_edit].tolist()[0]
+                    df_usuarios.at[idx_u, "Usuario"] = e_login.lower().strip()
+                    df_usuarios.at[idx_u, "Nombre_Completo"] = e_nombre.upper().strip()
+                    df_usuarios.at[idx_u, "Contrasena"] = e_pass.strip()
+                    df_usuarios.at[idx_u, "Rol"] = e_rol
+                    df_usuarios.at[idx_u, "Permisos"] = ",".join(nuevo_permiso)
+                    guardar_datos(df_usuarios, 'Usuarios')
+                    
+                    # Si se edita a sí mismo, refrescar en tiempo real
+                    if st.session_state.get("usuario_conectado") == str(datos_u.get("Nombre_Completo", "")):
+                        st.session_state["usuario_conectado"] = e_nombre.upper().strip()
+                        st.session_state["rol_conectado"] = e_rol
+                        st.session_state["permisos_conectado"] = nuevo_permiso
+                    
+                    st.success("✅ Perfil actualizado exitosamente.")
+                    st.rerun()
+                    
+        st.markdown("---")
+        st.markdown("#### 📋 Usuarios Registrados en el Sistema VSP")
+        st.dataframe(df_usuarios[["Nombre_Completo", "Usuario", "Rol"]], use_container_width=True, hide_index=True)
+        
+        # Eliminar usuario del histórico
+        if len(df_usuarios) > 1:
+            with st.expander("❌ Dar de baja a un Usuario"):
+                usuario_borrar = st.selectbox("Seleccione el usuario a eliminar:", df_usuarios[df_usuarios["Usuario"] != "admin"]["Usuario"].tolist())
+                if st.button("Eliminar Cuenta Permanentemente"):
+                    df_u_actualizado = df_usuarios[df_usuarios["Usuario"] != usuario_borrar]
+                    guardar_datos(df_u_actualizado, 'Usuarios')
+                    st.toast(f"Cuenta de {usuario_borrar} eliminada.", icon="ℹ️")
+                    st.rerun()
+
+    with t_depurar:
+        df_admin = cargar_datos('Eventos')
+        if not df_admin.empty:
+            df_admin['ID_Fila'] = range(len(df_admin))
+            df_admin['Detalle'] = df_admin['Fecha'].astype(str) + " - " + df_admin['Responsable'] + " (" + df_admin['Tipo de Evento'] + ")"
+            seleccion = st.selectbox("Seleccione registro para depuración permanente:", ["Seleccione..."] + df_admin['Detalle'].tolist())
+            if seleccion != "Seleccione..." and st.button("🚨 ELIMINAR REGISTRO PERMANENTEMENTE"):
+                idx = df_admin[df_admin['Detalle'] == seleccion]['ID_Fila'].values[0]
+                df_final = df_admin.drop(df_admin.index[idx]).drop(columns=['ID_Fila', 'Detalle'])
+                guardar_datos(df_final, 'Eventos')
+                st.session_state["mensaje_exito_temp"] = "🗑️ Registro de evento eliminado de la base de datos."
+                st.session_state["seccion_actual"] = "🏠 Inicio"; st.rerun()
+        else:
+            st.info("No hay actividades registradas en la base de datos.")
+
+def vista_vbc():
+    st.markdown("### 🏘️ Vigilancia Basada en la Comunidad (VBC)")
+    df_vbc = cargar_datos('VBC_Rumores')
+    t_reg, t_matriz, t_dash = st.tabs(["📝 Registrar Rumor", "📋 Matriz de Seguimiento", "📊 Analítica VBC"])
+
+    with t_reg:
+        with st.form("form_vbc", clear_on_submit=True):
+            vbc_fecha = st.date_input("Fecha de Reporte", value=datetime.today())
+            vbc_mun = st.selectbox("Municipio", LISTA_MUNICIPIOS)
+            vbc_vereda = st.text_input("Comunidad / Vereda / Barrio")
+            vbc_sindrome = st.selectbox("Tipo de Evento o Síndrome", ["Síndrome Febril (Posible Dengue/Malaria)", "Síndrome Respiratorio", "Enfermedad Diarreica Aguda (EDA)", "Enfermedad Transmitida por Alimentos (ETA)", "Mortalidad Inusual", "Zoonosis / Animales Enfermos", "Otro"])
+            vbc_fuente = st.text_input("Fuente de Información (Ej: Líder, Docente, Redes Sociales)")
+            vbc_desc = st.text_area("Descripción Detallada del Evento/Rumor")
+            vbc_resp = st.selectbox("Responsable de Verificación", LISTA_RESPONSABLES)
+            if st.form_submit_button("🚨 Reportar Alerta a VSP"):
+                nuevo_rumor = pd.DataFrame([{
+                    "Fecha_Reporte": vbc_fecha.strftime("%Y-%m-%d"), "Municipio": vbc_mun,
+                    "Comunidad_Vereda": vbc_vereda, "Tipo_Sindrome": vbc_sindrome,
+                    "Fuente_Reporte": vbc_fuente, "Descripcion_Evento": vbc_desc,
+                    "Estado_Verificacion": "🔴 Pendiente de Verificación", "Responsable_Verificacion": vbc_resp
+                }])
+                guardar_datos(pd.concat([df_vbc, nuevo_rumor], ignore_index=True), 'VBC_Rumores')
+                st.session_state["mensaje_exito_temp"] = "📢 Alerta comunitaria registrada exitosamente."
+                st.rerun()
+
+    with t_matriz:
+        if not df_vbc.empty:
+            st.dataframe(df_vbc, use_container_width=True, hide_index=True)
+            if st.session_state["rol_conectado"] != "Consulta / Invitado":
+                st.markdown("#### 🔄 Actualizar Estado de Alerta")
+                opciones = [f"{idx} - {row['Municipio']}: {row['Tipo_Sindrome']} ({row['Fecha_Reporte']})" for idx, row in df_vbc.iterrows()]
+                sel_rumor = st.selectbox("Seleccione el rumor a verificar:", opciones)
+                if sel_rumor:
+                    idx_r = int(sel_rumor.split(" - ")[0])
+                    nuevo_est = st.selectbox("Estado de la Investigación:", ["🔴 Pendiente de Verificación", "🟡 Descartado / Falsa Alarma", "🟢 Confirmado - Brote Activo", "🟢 Confirmado - Caso Aislado"])
+                    if st.button("💾 Actualizar Estado"):
+                        df_vbc.at[idx_r, "Estado_Verificacion"] = nuevo_est
+                        guardar_datos(df_vbc, 'VBC_Rumores')
+                        st.success("Estado actualizado.")
+                        st.rerun()
+        else:
+            st.info("No hay rumores comunitarios registrados.")
+
+    with t_dash:
+        if not df_vbc.empty:
+            col_g1, col_g2 = st.columns(2)
+            with col_g1:
+                st.markdown("#### Rumores por Municipio")
+                st.bar_chart(df_vbc["Municipio"].value_counts())
+            with col_g2:
+                st.markdown("#### Estado de Verificación")
+                st.bar_chart(df_vbc["Estado_Verificacion"].value_counts())
+        else:
+            st.info("Sin datos para analizar.")
+
+def vista_sivigila():
+    st.markdown("### 📈 Tableros Epidemiológicos (SIVIGILA)")
+    st.info("Sube un archivo de rutina SIVIGILA (.csv o .xlsx) para generar análisis rápidos automáticos.")
+    archivo = st.file_uploader("Cargar Base de Datos SIVIGILA", type=["csv", "xlsx"])
+    if archivo:
+        try:
+            if archivo.name.endswith(".csv"):
+                df_siv = pd.read_csv(archivo, encoding='latin1', sep=';')
+                if len(df_siv.columns) < 5: df_siv = pd.read_csv(archivo, encoding='utf-8', sep=',')
+            else:
+                df_siv = pd.read_excel(archivo)
+            
+            st.success(f"Archivo cargado correctamente: {len(df_siv)} registros.")
+            with st.expander("👁️ Vista Previa de la Base de Datos"):
+                st.dataframe(df_siv.head(50))
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if 'semana' in df_siv.columns.str.lower():
+                    col_sem = df_siv.columns[df_siv.columns.str.lower() == 'semana'][0]
+                    st.markdown("#### 📊 Tendencia por Semana Epidemiológica")
+                    conteo_sem = df_siv[col_sem].value_counts().sort_index()
+                    st.line_chart(conteo_sem)
+                else:
+                    st.warning("No se detectó columna 'semana' para gráfico temporal.")
+            with col2:
+                if 'sexo' in df_siv.columns.str.lower() and 'edad' in df_siv.columns.str.lower():
+                    col_sex = df_siv.columns[df_siv.columns.str.lower() == 'sexo'][0]
+                    col_ed = df_siv.columns[df_siv.columns.str.lower() == 'edad'][0]
+                    st.markdown("#### 👥 Distribución por Sexo")
+                    st.bar_chart(df_siv[col_sex].value_counts())
+                else:
+                    st.warning("No se detectaron columnas 'sexo' y 'edad' para distribución demográfica.")
+        except Exception as e:
+            st.error(f"Error procesando el archivo: {e}")
+
+def vista_calidad_dato():
+    st.markdown("### 🛡️ Módulo de Calidad del Dato")
+    st.info("Auditoría automática de bases de datos SIVIGILA.")
+    archivo = st.file_uploader("Cargar Base SIVIGILA para Auditoría", type=["csv", "xlsx"], key="calidad")
+    if archivo:
+        try:
+            if archivo.name.endswith(".csv"):
+                df_siv = pd.read_csv(archivo, encoding='latin1', sep=';')
+                if len(df_siv.columns) < 5: df_siv = pd.read_csv(archivo, encoding='utf-8', sep=',')
+            else:
+                df_siv = pd.read_excel(archivo)
+            
+            nulos = df_siv.isnull().sum()
+            nulos_criticos = nulos[nulos > 0].sort_values(ascending=False)
+            st.markdown("#### 🚨 Variables con Datos Faltantes (Inconsistencias)")
+            if not nulos_criticos.empty:
+                st.dataframe(pd.DataFrame({"Variables": nulos_criticos.index, "Cantidad Nulos": nulos_criticos.values}))
+            else:
+                st.success("¡Excelente! No hay valores nulos en la base de datos.")
+        except Exception as e:
+            st.error(f"Error procesando el archivo: {e}")
+
+def vista_directorio():
+    st.markdown("### 📞 Directorio de Red Institucional y Notificación Masiva")
+    df_dir = cargar_datos('Directorio_Contactos')
+    t_lista, t_nuevo = st.tabs(["📋 Directorio de Actores", "➕ Registrar Contacto"])
+    
+    with t_lista:
+        st.markdown("#### 🔗 Directorio Central en la Nube")
+        st.link_button("🌐 Abrir Directorio Maestro Completo (Google Sheets)", URL_DIRECTORIO_ENTIDADES, use_container_width=True, type="primary")
+        st.caption("Usa este botón para editar el directorio principal hospedado en línea.")
+        st.markdown("---")
+        
+        st.markdown("#### 📋 Base de Datos Auxiliar de Contactos (Local)")
+        if not df_dir.empty:
+            st.dataframe(df_dir, use_container_width=True, hide_index=True)
+            st.markdown("#### 📧 Enviar Notificación Masiva a la Red")
+            correos_validos = [c for c in df_dir["Correo"] if "@" in str(c)]
+            if correos_validos:
+                lista_bcc = ",".join(correos_validos)
+                st.markdown(f'<a href="mailto:?bcc={lista_bcc}&subject=ALERTA EPIDEMIOLOGICA VSP SUCRE"><button style="padding:10px; background-color:#eab308; border:none; border-radius:5px; color:black; font-weight:bold;">✉️ Generar Correo a Todos los Actores ({len(correos_validos)} correos)</button></a>', unsafe_allow_html=True)
+        else:
+            st.info("Directorio vacío.")
+            
+    with t_nuevo:
+        with st.form("form_dir", clear_on_submit=True):
+            dir_nombre = st.text_input("Nombre Completo:")
+            dir_entidad = st.text_input("Entidad (EPS, IPS, Sec. Salud):")
+            dir_mun = st.selectbox("Municipio:", LISTA_MUNICIPIOS)
+            dir_correo = st.text_input("Correo Electrónico:")
+            dir_tel = st.text_input("Teléfono:")
+            dir_rol = st.text_input("Cargo / Rol:")
+            if st.form_submit_button("💾 Guardar Contacto"):
+                nuevo_c = pd.DataFrame([{"Nombre": dir_nombre, "Entidad": dir_entidad, "Municipio": dir_mun, "Correo": dir_correo, "Telefono": dir_tel, "Rol": dir_rol}])
+                guardar_datos(pd.concat([df_dir, nuevo_c], ignore_index=True), 'Directorio_Contactos')
+                st.success("Contacto agregado.")
+                st.rerun()
+
+
+def vista_auditoria():
+    st.markdown("### 🛡️ Módulo de Auditoría y Logs de Seguridad")
+    if st.session_state["rol_conectado"] != "Administrador Total":
+        st.error("❌ Acceso Denegado. Solo el Administrador Total puede ver la auditoría del sistema.")
+        return
+        
+    df_logs = cargar_datos('Auditoria_Logs')
+    if not df_logs.empty:
+        df_logs = df_logs.sort_values(by="Fecha_Hora", ascending=False)
+        col1, col2 = st.columns(2)
+        with col1:
+            busqueda = st.text_input("🔍 Buscar en Logs (Usuario, Acción o Módulo):")
+        with col2:
+            st.metric("Total de Movimientos Registrados", len(df_logs))
+            
+        if busqueda:
+            mask = df_logs.astype(str).apply(lambda col: col.str.contains(busqueda, case=False, na=False)).any(axis=1)
+            df_logs = df_logs[mask]
+            
+        st.dataframe(df_logs, use_container_width=True, hide_index=True)
+        st.caption("Los registros de auditoría son inmutables por diseño para garantizar la transparencia.")
+    else:
+        st.info("No hay registros de auditoría todavía.")
+
+def vista_brotes_eri():
+    st.markdown("### 🚨 Brotes y Equipos de Respuesta Inmediata (ERI)")
+    df_brotes = cargar_datos('Brotes_ERI')
+    
+    t_rep, t_matriz, t_dash = st.tabs(["🔴 Reportar Alerta / Brote", "📋 Matriz y Asignación de ERI", "📊 Analítica de Brotes"])
+    
+    with t_rep:
+        with st.form("form_brote", clear_on_submit=True):
+            b_fecha = st.date_input("Fecha de Alerta:", value=datetime.today())
+            b_mun = st.selectbox("Municipio Afectado:", LISTA_MUNICIPIOS)
+            b_patologia = st.selectbox("Evento / Patología:", ["Dengue", "Malaria", "Enfermedad Diarreica Aguda (EDA)", "Infección Respiratoria Aguda (IRA)", "Intoxicación Masiva", "Otro"])
+            b_fuente = st.text_input("Fuente de Notificación (Ej: Hospital Local, Líder, SIVIGILA):")
+            b_desc = st.text_area("Descripción de la Situación y Acciones Iniciales:")
+            
+            if st.form_submit_button("🚨 Declarar Alerta Epidemiológica"):
+                if "Seleccione..." in b_mun: st.error("Seleccione un municipio.")
+                else:
+                    nuevo_brote = pd.DataFrame([{
+                        "Fecha_Alerta": b_fecha.strftime("%Y-%m-%d"), "Municipio": b_mun,
+                        "Patologia": b_patologia, "Fuente": b_fuente, "Descripcion": b_desc,
+                        "Equipo_Asignado": "Pendiente", "Estado": "🔴 ACTIVO", "Ruta_ERI": ""
+                    }])
+                    guardar_datos(pd.concat([df_brotes, nuevo_brote], ignore_index=True), 'Brotes_ERI')
+                    registrar_log(f"Alerta de Brote Declarada: {b_patologia} en {b_mun}", "Brotes y ERI")
+                    st.success("Brote registrado con éxito.")
+                    st.rerun()
+
+    with t_matriz:
+        if not df_brotes.empty:
+            st.dataframe(df_brotes[["Fecha_Alerta", "Municipio", "Patologia", "Estado", "Equipo_Asignado"]], use_container_width=True, hide_index=True)
+            st.markdown("---")
+            st.markdown("#### ⚙️ Gestión de Brote (Asignación y Cierre)")
+            opciones_b = [f"{idx} - {row['Patologia']} en {row['Municipio']} ({row['Estado']})" for idx, row in df_brotes.iterrows()]
+            sel_brote = st.selectbox("Seleccione el Brote a Gestionar:", opciones_b)
+            if sel_brote:
+                idx_b = int(sel_brote.split(" - ")[0])
+                fila_b = df_brotes.iloc[idx_b]
+                
+                with st.expander("📝 Desplegar Equipo ERI", expanded=True):
+                    eq_asig = st.text_area("Integrantes del Equipo de Respuesta Inmediata (ERI):", value=fila_b["Equipo_Asignado"])
+                    if st.button("💾 Asignar Equipo"):
+                        df_brotes.at[idx_b, "Equipo_Asignado"] = eq_asig
+                        guardar_datos(df_brotes, 'Brotes_ERI')
+                        registrar_log(f"Equipo ERI asignado al brote {idx_b}", "Brotes y ERI")
+                        st.success("Equipo asignado.")
+                        st.rerun()
+                        
+                with st.expander("✅ Cierre e Informe de Campo (ERI)", expanded=True):
+                    n_estado = st.selectbox("Estado del Brote:", ["🔴 ACTIVO", "🟡 CONTROLADO", "🟢 CERRADO"], index=["🔴 ACTIVO", "🟡 CONTROLADO", "🟢 CERRADO"].index(fila_b["Estado"]) if fila_b["Estado"] in ["🔴 ACTIVO", "🟡 CONTROLADO", "🟢 CERRADO"] else 0)
+                    doc_eri = st.file_uploader("Adjuntar Informe ERI Definitivo (PDF):", type=["pdf", "docx"])
+                    if st.button("💾 Guardar Cierre de Brote"):
+                        if doc_eri:
+                            os.makedirs(CARPETA_SOPORTES, exist_ok=True)
+                            ruta_doc = os.path.join(CARPETA_SOPORTES, f"ERI_{idx_b}_{datetime.today().strftime('%Y%m%d')}.{doc_eri.name.split('.')[-1]}")
+                            with open(ruta_doc, "wb") as f: f.write(doc_eri.getbuffer())
+                            df_brotes.at[idx_b, "Ruta_ERI"] = ruta_doc
+                        df_brotes.at[idx_b, "Estado"] = n_estado
+                        guardar_datos(df_brotes, 'Brotes_ERI')
+                        registrar_log(f"Brote {idx_b} actualizado a estado {n_estado}", "Brotes y ERI")
+                        st.success("Actualizado.")
+                        st.rerun()
+                
+                r_eri = str(fila_b.get("Ruta_ERI", ""))
+                if r_eri and r_eri != "nan" and os.path.exists(r_eri):
+                    with open(r_eri, "rb") as f:
+                        st.download_button("📥 Descargar Informe ERI", data=f.read(), file_name=os.path.basename(r_eri), use_container_width=True)
+        else:
+            st.info("No hay brotes reportados.")
+
+    with t_dash:
+        if not df_brotes.empty:
+            c1, c2 = st.columns(2)
+            c1.bar_chart(df_brotes["Municipio"].value_counts())
+            c2.bar_chart(df_brotes["Patologia"].value_counts())
+        else:
+            st.info("Sin datos de brotes.")
+
+def vista_tablero_problemas():
+    st.markdown("### 🛑 Tablero de Problemas (Issue Tracker VSP)")
+    df_prob = cargar_datos('Tablero_Problemas')
+    
+    t_nuevo, t_tablero = st.tabs(["➕ Reportar Problema", "📋 Tablero Kanban"])
+    
+    with t_nuevo:
+        with st.form("form_prob", clear_on_submit=True):
+            p_mun = st.selectbox("Municipio Afectado:", LISTA_MUNICIPIOS)
+            p_cat = st.selectbox("Categoría del Problema:", ["Falta de Insumos/Reactivos", "Inconsistencia de Datos (SIVIGILA)", "Problemas de Conectividad/Plataforma", "Falta de Personal en Hospital", "Otro"])
+            p_desc = st.text_area("Descripción detallada del bloqueo:")
+            p_resp = st.selectbox("Referente VSP Encargado de Resolver:", LISTA_RESPONSABLES)
+            
+            if st.form_submit_button("📢 Crear Ticket de Problema"):
+                if "Seleccione..." in p_mun or not p_desc.strip():
+                    st.error("Datos incompletos.")
+                else:
+                    nuevo_p = pd.DataFrame([{
+                        "Fecha_Reporte": datetime.today().strftime("%Y-%m-%d"), "Municipio": p_mun,
+                        "Categoria": p_cat, "Descripcion": p_desc, "Responsable": p_resp,
+                        "Estado": "🔴 ABIERTO", "Respuesta": ""
+                    }])
+                    guardar_datos(pd.concat([df_prob, nuevo_p], ignore_index=True), 'Tablero_Problemas')
+                    registrar_log(f"Problema reportado en {p_mun} ({p_cat})", "Tablero Problemas")
+                    st.success("Problema registrado en el tablero.")
+                    st.rerun()
+                    
+    with t_tablero:
+        if not df_prob.empty:
+            c_abierto, c_proceso, c_resuelto = st.columns(3)
+            
+            for idx, row in df_prob.iterrows():
+                estado = str(row["Estado"])
+                tarjeta = f"""
+                <div style='background:rgba(30,41,59,0.7); padding:15px; border-radius:10px; border-left: 5px solid {"#ef4444" if "ABIERTO" in estado else "#eab308" if "PROCESO" in estado else "#22c55e"}; margin-bottom:10px;'>
+                    <small style='color:gray;'>Ticket #{idx} - {row['Municipio']}</small>
+                    <h5 style='margin-top:5px; margin-bottom:5px; color:#e2e8f0;'>{row['Categoria']}</h5>
+                    <p style='font-size:0.85em; color:#94a3b8;'>{row['Descripcion']}</p>
+                    <small><b>Resuelve:</b> {row['Responsable']}</small>
+                </div>
+                """
+                if "ABIERTO" in estado: c_abierto.markdown(tarjeta, unsafe_allow_html=True)
+                elif "PROCESO" in estado: c_proceso.markdown(tarjeta, unsafe_allow_html=True)
+                else: c_resuelto.markdown(tarjeta, unsafe_allow_html=True)
+                
+            st.markdown("---")
+            with st.expander("🔄 Actualizar o Resolver Ticket"):
+                opciones_p = [f"{idx} - Ticket #{idx} ({row['Municipio']} - {row['Categoria']})" for idx, row in df_prob.iterrows()]
+                sel_p = st.selectbox("Seleccione Ticket:", opciones_p)
+                if sel_p:
+                    idx_p = int(sel_p.split(" - ")[0])
+                    n_estado_p = st.selectbox("Nuevo Estado:", ["🔴 ABIERTO", "🟡 EN PROCESO", "🟢 RESUELTO"])
+                    n_resp_p = st.text_area("Respuesta o Gestión Realizada:", value=str(df_prob.iloc[idx_p]["Respuesta"]))
+                    if st.button("💾 Guardar Gestión"):
+                        df_prob.at[idx_p, "Estado"] = n_estado_p
+                        df_prob.at[idx_p, "Respuesta"] = n_resp_p
+                        guardar_datos(df_prob, 'Tablero_Problemas')
+                        registrar_log(f"Ticket #{idx_p} actualizado a {n_estado_p}", "Tablero Problemas")
+                        st.success("Ticket actualizado.")
+                        st.rerun()
+        else:
+            st.info("El tablero está limpio. No hay problemas reportados.")
+
+def vista_asistente_ia():
+    st.markdown("### 🤖 Asistente Redactor VSP (Generador Inteligente)")
+    st.info("Usa este módulo para redactar rápidamente correos institucionales, respuestas a entes de control o comunicados técnicos sin escribir desde cero.")
+    
+    tipo_texto = st.selectbox("¿Qué deseas que redacte el asistente?", [
+        "Seleccione...",
+        "Solicitud Formal de Plazo (Ministerio/INS)",
+        "Respuesta a Requerimiento de Procuraduría/Contraloría",
+        "Convocatoria Urgente a Sala Situacional",
+        "Comunicado de Alerta a Hospitales/Clínicas"
+    ])
+    
+    if tipo_texto != "Seleccione...":
+        asunto = st.text_input("Asunto/Tema Central:", placeholder="Ej: Brote de Dengue en Sincelejo")
+        destinatario = st.text_input("Destinatario (Entidad o Persona):", placeholder="Ej: Instituto Nacional de Salud")
+        
+        if st.button("✨ Generar Redacción Automática", type="primary"):
+            if not asunto or not destinatario:
+                st.error("Por favor completa el Asunto y el Destinatario para generar el documento.")
+            else:
+                fecha_hoy = datetime.today().strftime('%d de %B de %Y')
+                
+                if "Plazo" in tipo_texto:
+                    borrador = f"Sincelejo, {fecha_hoy}\n\nSeñores,\n{destinatario}\n\nAsunto: Solicitud de prórroga para entrega de informe sobre {asunto}.\n\nCordial saludo.\n\nPor medio del presente escrito, y desde la coordinación de Vigilancia en Salud Pública de la Gobernación de Sucre, nos dirigimos a ustedes de la manera más respetuosa para solicitar una extensión del plazo otorgado para la presentación del informe relacionado con {asunto}.\n\nActualmente, nuestro equipo técnico se encuentra consolidando la información de campo enviada por los diferentes municipios, lo cual ha tomado más tiempo del estimado debido a problemas técnicos en el flujo de datos. Nos comprometemos a radicar el informe definitivo en un plazo no mayor a 3 días hábiles.\n\nAgradeciendo de antemano su comprensión y colaboración.\n\nAtentamente,\n\nSubprograma de Vigilancia en Salud Pública\nGobernación de Sucre."
+                elif "Requerimiento" in tipo_texto:
+                    borrador = f"Sincelejo, {fecha_hoy}\n\nSeñores,\n{destinatario}\n\nAsunto: Respuesta formal a requerimiento sobre {asunto}.\n\nRespetados señores.\n\nEn atención a la solicitud de la referencia, remitida a esta oficina, el equipo de Vigilancia en Salud Pública de la Secretaría de Salud Departamental se permite dar respuesta formal respecto a los hallazgos y seguimientos relacionados con {asunto}.\n\nAdjunto a esta comunicación, encontrarán los soportes técnicos, matrices de Excel y actas de compromisos que evidencian la gestión realizada por nuestro equipo en los municipios afectados. Hemos cumplido con los lineamientos del Instituto Nacional de Salud para mitigar el riesgo descrito.\n\nQuedamos a su entera disposición para cualquier aclaración técnica que requieran sobre los documentos anexos.\n\nCordialmente,\n\nCoordinación de Epidemiología\nGobernación de Sucre."
+                elif "Convocatoria" in tipo_texto:
+                    borrador = f"**URGENTE - CONVOCATORIA A SALA SITUACIONAL**\n\nFecha: {fecha_hoy}\nDestinatario: {destinatario}\nAsunto: {asunto}\n\nEstimado equipo,\n\nDebido a la evolución epidemiológica reciente referente a {asunto}, se convoca de carácter obligatorio y urgente a una Sala Situacional Extraordinaria.\n\nEl objetivo de la reunión es analizar los datos de la última semana epidemiológica, establecer responsabilidades inmediatas y coordinar el despliegue del Equipo de Respuesta Inmediata (ERI) en la zona de brote.\n\nPor favor, asistir con los informes y bases de datos consolidadas de sus respectivos municipios o áreas de competencia.\n\nSaludos,\nVigilancia en Salud Pública."
+                else:
+                    borrador = f"COMUNICADO OFICIAL DE ALERTA\n\nDestino: {destinatario}\nAsunto: {asunto}\nFecha de Emisión: {fecha_hoy}\n\nSe informa a toda la red hospitalaria y clínica del departamento que se ha activado una alerta preventiva por {asunto}.\n\nSe requiere fortalecer la captación e intensificar la búsqueda activa institucional y comunitaria para este evento. Recordamos que la notificación en SIVIGILA debe hacerse dentro de las próximas 24 horas frente a cualquier caso probable.\n\nAgradecemos su apoyo en la difusión inmediata de esta circular interna."
+                
+                st.success("✅ Texto generado exitosamente.")
+                st.text_area("Borrador Final (Listo para copiar y pegar):", value=borrador, height=350)
+
+# ==========================================
+# 8. ENRUTADOR PRINCIPAL DE LA APLICACIÓN
+# ==========================================
+mapeo_vistas = {
+    "🏠 Inicio": vista_inicio,
+    "📝 Registrar Actividad": vista_registrar_actividad,
+    "🛡️ Disponibilidad Semanal": vista_disponibilidad_semanal,
+    "📋 Compromisos Técnicos": vista_compromisos_tecnicos,
+    "🛠️ Enlaces y Solicitudes HC": vista_enlaces_hc,
+    "📄 Actas e Informes": vista_actas_informes,
+    "🚨 Alertas e Inventario": vista_alertas_inventario,
+    "🔍 Filtros y Dashboard": vista_filtros_dashboard,
+    "🚨 Brotes y ERI": vista_brotes_eri,
+    "🛑 Tablero de Problemas": vista_tablero_problemas,
+    "🏘️ Vigilancia Comunitaria (VBC)": vista_vbc,
+    "📈 Tableros SIVIGILA": vista_sivigila,
+    "🛡️ Calidad del Dato": vista_calidad_dato,
+    "📞 Directorio de Red": vista_directorio,
+    "🤖 Asistente Redactor VSP": vista_asistente_ia,
+    "⚙️ Panel Maestro y Roles": vista_panel_maestro,
+    "🛡️ Auditoría y Logs": vista_auditoria
+}
+
+if st.session_state["seccion_actual"] in mapeo_vistas:
+    mapeo_vistas[st.session_state["seccion_actual"]]()
