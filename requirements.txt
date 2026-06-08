@@ -3,3 +3,6 @@ streamlit-calendar
 pandas
 openpyxl
 holidays
+plotly
+PyPDF2
+fpdf
