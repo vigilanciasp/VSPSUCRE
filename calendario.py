@@ -184,6 +184,7 @@ BASE_GOOGLE_FORMS = "https://docs.google.com/forms/d/e/1FAIpQLSc1o7tjgmWqKhdTV1H
 ID_TEMA_FORM = "entry.67209856"
 URL_GOOGLE_SHEET = "https://docs.google.com/spreadsheets/d/162S8gANBLi-d3oKJZKieFl0ff46flPYwE8U5zoE7XUI/edit?resourcekey=&gid=621967594#gid=621967594" 
 URL_DIRECTORIO_ENTIDADES = "https://docs.google.com/spreadsheets/d/12OoDlbA8L3uaAv0ZZqzSU08nLx0lzUf_/edit?rtpof=true&sd=true&gid=1427970023#gid=1427970023"
+URL_CONSECUTIVOS = "https://docs.google.com/spreadsheets/d/16jQlyAyO514qPppE6Tu6ThhWxqW1CHB0wLWE1FeYhKY/edit?usp=drivesdk"
 
 if not os.path.exists(CARPETA_SOPORTES):
     os.makedirs(CARPETA_SOPORTES)
@@ -242,7 +243,8 @@ def inicializar_db():
         'Solicitudes_Teams': ['Fecha_Solicitud', 'Fecha_Evento', 'Tema', 'Responsable_Evento', 'Encargado_Links', 'Estado', 'Enlace_Teams'],
         'Brotes_ERI': ['Fecha_Alerta', 'Municipio', 'Patologia', 'Fuente', 'Descripcion', 'Equipo_Asignado', 'Estado', 'Ruta_ERI'],
         'Tablero_Problemas': ['Fecha_Reporte', 'Municipio', 'Categoria', 'Descripcion', 'Responsable', 'Estado', 'Respuesta'],
-        'Auditoria_Logs': ['Fecha_Hora', 'Usuario', 'Accion', 'Modulo']
+        'Auditoria_Logs': ['Fecha_Hora', 'Usuario', 'Accion', 'Modulo'],
+        'Consecutivos_Actas': ['Fecha', 'Tipo_Documento', 'Consecutivo', 'Asunto', 'Responsable']
     }
     
     if not os.path.exists(ARCHIVO_DB):
@@ -414,16 +416,26 @@ if not st.session_state["autenticado"]:
     st.markdown("<br><br><br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
-        st.markdown("<div class='metric-card' style='text-align: center; padding: 40px;'>", unsafe_allow_html=True)
-        if os.path.exists("logo.png"): st.image("logo.png", width=120)
-        st.markdown("<h2 style='margin-bottom:5px;'>Sistema VSP Sucre</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #94a3b8; margin-bottom: 25px;'>Por favor, inicie sesión para continuar</p>", unsafe_allow_html=True)
+        html_header = "<div class='metric-card' style='text-align: center; padding: 40px; border-top: 5px solid #2563eb; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); margin-bottom: 25px;'>"
+        if os.path.exists("logo.png"):
+            import base64
+            with open("logo.png", "rb") as f:
+                img_b64 = base64.b64encode(f.read()).decode()
+            html_header += f"<img src='data:image/png;base64,{img_b64}' width='260' style='margin-bottom: 15px; border-radius: 8px; background-color: white; padding: 10px;'><br>"
+        else:
+            html_header += "<h1 style='font-size: 3rem; margin-bottom: 10px;'>🏢</h1>"
+            
+        html_header += "<h2 style='margin-bottom:5px; font-weight: 700; color: #f8fafc;'>Sistema Integral VSP</h2>"
+        html_header += "<p style='color: #94a3b8; margin-bottom: 0px; font-size: 1.1rem;'>Plataforma Gerencial y Operativa</p>"
+        html_header += "</div>"
+        
+        st.markdown(html_header, unsafe_allow_html=True)
         
         with st.form("login_form", clear_on_submit=False):
-            txt_user = st.text_input("Usuario:", key="login_user")
-            txt_pass = st.text_input("Contraseña:", type="password", key="login_pass")
+            txt_user = st.text_input("👤 Usuario (Correo / ID):", key="login_user")
+            txt_pass = st.text_input("🔑 Contraseña:", type="password", key="login_pass")
             st.markdown("<br>", unsafe_allow_html=True)
-            btn_login = st.form_submit_button("🔓 Entrar al Sistema", use_container_width=True, type="primary")
+            btn_login = st.form_submit_button("🔓 Ingresar al Sistema", use_container_width=True, type="primary")
         
         if btn_login:
             df_users_db = cargar_datos('Usuarios')
@@ -431,6 +443,7 @@ if not st.session_state["autenticado"]:
             
             if not validado.empty:
                 st.session_state["autenticado"] = True
+                st.session_state["mostrar_bienvenida"] = True
                 st.session_state["usuario_conectado"] = validado.iloc[0]["Nombre_Completo"]
                 st.session_state["rol_conectado"] = validado.iloc[0]["Rol"]
                 
@@ -446,6 +459,10 @@ if not st.session_state["autenticado"]:
                 st.error("❌ Credenciales incorrectas.")
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop() # Bloquea el resto de la app hasta loguearse
+
+if st.session_state.get("mostrar_bienvenida"):
+    st.toast(f"👋 ¡Bienvenido(a) al sistema, {st.session_state['usuario_conectado']}!", icon="✅")
+    st.session_state["mostrar_bienvenida"] = False
 
 # ==========================================
 # 6. ENCABEZADO Y SISTEMA DE NAVEGACIÓN POR ROLES
@@ -548,7 +565,7 @@ def vista_inicio():
         st.divider()
 
     st.markdown("### 🚀 Accesos Directos de la Red")
-    col_ad1, col_ad2, col_ad3, col_ad4 = st.columns(4)
+    col_ad1, col_ad2, col_ad3, col_ad4, col_ad5 = st.columns(5)
     with col_ad1:
         st.link_button("🌐 Portal SIVIGILA 4.0", ENLACE_PORTAL_WEB, use_container_width=True)
     with col_ad2:
@@ -561,6 +578,8 @@ def vista_inicio():
         if st.button("🚨 Alertas y Notificaciones", use_container_width=True):
             st.session_state["seccion_actual"] = "🚨 Alertas e Inventario"
             st.rerun()
+    with col_ad5:
+        st.link_button("🔢 Consecutivo de Actas (Drive)", URL_CONSECUTIVOS, use_container_width=True)
     st.divider()
 
     st.markdown("### 🔍 Panel de Filtros Cruzados (Agenda Mensual)")
@@ -974,7 +993,15 @@ def vista_enlaces_hc():
                     
                     st.markdown("**Cargar Documento Recibido:**")
                     hc_file = st.file_uploader("Adjuntar PDF o Imagen remitida por la EAPB:", type=["pdf", "jpg", "png", "jpeg"], key=f"up_hc_{idx_p}")
-                    if st.button("💾 Guardar Documento y Cerrar Solicitud", use_container_width=True):
+                    
+                    c_btn1, c_btn2 = st.columns(2)
+                    if c_btn2.button("🗑️ Eliminar Solicitud (Prueba)", use_container_width=True):
+                        df_solicitudes = df_solicitudes.drop(idx_p)
+                        guardar_datos(df_solicitudes, 'Solicitudes_Externas')
+                        st.session_state["mensaje_exito_temp"] = "🗑️ Solicitud de prueba eliminada exitosamente."
+                        st.rerun()
+                        
+                    if c_btn1.button("💾 Guardar Documento y Cerrar", use_container_width=True, type="primary"):
                         if hc_file is not None:
                             os.makedirs(CARPETA_SOPORTES, exist_ok=True)
                             nombre_hc = f"HC_{idx_p}_{datetime.today().strftime('%Y%m%d%H%M')}.{hc_file.name.split('.')[-1]}"
@@ -1220,7 +1247,9 @@ def vista_enlaces_hc():
 def vista_actas_informes():
     st.markdown("### 📄 Módulo Documental de Actas e Informes de Gestión (VSP)")
     df_actas = cargar_datos('Actas')
-    t_ver_actas, t_crear_acta = st.tabs(["🔍 Historial de Actas Radicadas", "📝 Generar Nueva Acta / Minuta"])
+    df_consec = cargar_datos('Consecutivos_Actas')
+    
+    t_ver_actas, t_crear_acta, t_consecutivo = st.tabs(["🔍 Historial de Actas Radicadas", "📝 Generar Nueva Acta / Minuta", "🔢 Generador de Consecutivos"])
     
     with t_ver_actas:
         if not df_actas.empty:
@@ -1266,6 +1295,78 @@ def vista_actas_informes():
                     guardar_datos(pd.concat([df_actas, nueva_acta], ignore_index=True), 'Actas')
                     st.session_state["mensaje_exito_temp"] = "🎉 ¡Acta técnica archivada e indexada con éxito!"
                     st.rerun()
+
+    with t_consecutivo:
+        st.markdown("#### 🔢 Generador Automático de Consecutivos Institucionales")
+        st.info("Este módulo asigna el siguiente número consecutivo oficial para los documentos de VSP de forma automática y lo bloquea para que no se repita. Incluye validación de fecha.")
+        
+        c_tipo, c_fecha = st.columns(2)
+        tipo_doc_consecutivo = c_tipo.selectbox("Tipo de Documento Oficial:", ["ACTA (Reuniones/Comités)", "CIRCULAR (Interna/Lineamientos)", "MEMORANDO (Interno)", "OFICIO (Interno)", "OTRO (Externo/Recibido)"])
+        fecha_consecutivo = c_fecha.date_input("Fecha del Documento:", value=datetime.today(), min_value=datetime.today() - timedelta(days=5), max_value=datetime.today())
+        
+        # Determinar prefijo
+        if "ACTA" in tipo_doc_consecutivo: prefijo = "ACTA-VSP"
+        elif "CIRCULAR" in tipo_doc_consecutivo: prefijo = "CIRC-VSP"
+        elif "MEMO" in tipo_doc_consecutivo: prefijo = "MEMO-VSP"
+        elif "OFICIO" in tipo_doc_consecutivo: prefijo = "OFI-VSP"
+        else: prefijo = "EXT-VSP"
+        
+        año_actual = fecha_consecutivo.strftime("%Y")
+        
+        # Calcular sugerencia automática
+        df_filtrado = df_consec[(df_consec['Tipo_Documento'] == tipo_doc_consecutivo) & (df_consec['Fecha'].astype(str).str.startswith(año_actual))]
+        if df_filtrado.empty:
+            siguiente_numero = 1
+        else:
+            try:
+                numeros = df_filtrado['Consecutivo'].str.split('-').str[-1].astype(int)
+                siguiente_numero = numeros.max() + 1
+            except:
+                siguiente_numero = len(df_filtrado) + 1
+        
+        consecutivo_sugerido = f"{prefijo}-{año_actual}-{str(siguiente_numero).zfill(3)}"
+        
+        es_admin = st.session_state.get("rol_conectado") == "Administrador Total"
+        label_consec = "Número Consecutivo a Asignar (Modificable solo por Administrador):" if es_admin else "Número Consecutivo Oficial (Asignación Automática):"
+        consecutivo_final = st.text_input(label_consec, value=consecutivo_sugerido, disabled=not es_admin)
+        asunto_consecutivo = st.text_input("Asunto o Tema Principal del Documento:")
+        responsable_consecutivo = st.selectbox("Responsable / Elabora:", LISTA_RESPONSABLES, key="consec_resp")
+        
+        if st.button("🎯 Generar y Reservar Nuevo Consecutivo", use_container_width=True, type="primary"):
+            if "Seleccione..." in responsable_consecutivo or asunto_consecutivo.strip() == "" or consecutivo_final.strip() == "":
+                st.error("⚠️ Debe completar el consecutivo, el asunto y el responsable.")
+            else:
+                nuevo_consec = pd.DataFrame([{
+                    "Fecha": fecha_consecutivo.strftime("%Y-%m-%d"),
+                    "Tipo_Documento": tipo_doc_consecutivo,
+                    "Consecutivo": consecutivo_final.strip().upper(),
+                    "Asunto": asunto_consecutivo.upper(),
+                    "Responsable": responsable_consecutivo
+                }])
+                
+                df_consec = pd.concat([df_consec, nuevo_consec], ignore_index=True)
+                guardar_datos(df_consec, 'Consecutivos_Actas')
+                
+                st.session_state["mensaje_exito_temp"] = f"✅ ¡Consecutivo {consecutivo_final.strip().upper()} asignado con éxito! Por favor úselo en su documento."
+                st.rerun()
+        
+        st.markdown("---")
+        st.markdown("#### 📋 Historial de Consecutivos Asignados")
+        if not df_consec.empty:
+            st.dataframe(df_consec.sort_values("Fecha", ascending=False), use_container_width=True, hide_index=True)
+            
+            if st.session_state.get("rol_conectado") == "Administrador Total":
+                st.markdown("<br>", unsafe_allow_html=True)
+                with st.expander("🛠️ Depuración de Consecutivos (Solo Administrador)"):
+                    st.warning("Use esta opción para borrar registros de prueba o errores de digitación. El número quedará libre de nuevo.")
+                    consec_a_borrar = st.selectbox("Seleccione el registro a eliminar:", range(len(df_consec)), format_func=lambda x: f"{df_consec.iloc[x]['Consecutivo']} - {df_consec.iloc[x]['Asunto']}")
+                    if st.button("⚠️ Eliminar Registro Definitivamente", use_container_width=True):
+                        df_consec = df_consec.drop(consec_a_borrar)
+                        guardar_datos(df_consec, 'Consecutivos_Actas')
+                        st.session_state["mensaje_exito_temp"] = "🗑️ Registro de consecutivo eliminado exitosamente."
+                        st.rerun()
+        else:
+            st.caption("No hay consecutivos asignados todavía en el sistema.")
 
 def vista_alertas_inventario():
     st.markdown("### 🚨 Central de Alertas Epidemiológicas e Insumos Críticos")
@@ -1896,4 +1997,13 @@ mapeo_vistas = {
 }
 
 if st.session_state["seccion_actual"] in mapeo_vistas:
+    st.markdown("<div id='inicio-modulo'></div>", unsafe_allow_html=True)
+    st.components.v1.html("""<script>
+        setTimeout(function() {
+            var scroll_target = window.parent.document.getElementById('inicio-modulo');
+            if (scroll_target) {
+                scroll_target.scrollIntoView({behavior: 'smooth', block: 'start'});
+            }
+        }, 150);
+    </script>""", height=0)
     mapeo_vistas[st.session_state["seccion_actual"]]()
