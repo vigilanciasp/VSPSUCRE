@@ -274,7 +274,8 @@ def inicializar_db():
         'Casos_Criticos': ['Fecha_Notificacion', 'Evento', 'Identificacion', 'Municipio', 'Fase', 'Dias_Mora'],
         'IPS_UPGD': ['Municipio', 'Nombre_IPS', 'Codigo_Sede', 'Reporto_Ultima_Semana', 'Fecha_Ultimo_Reporte'],
         'Boletines_Data': ['Semana', 'Municipio', 'Evento', 'Edad', 'Sexo', 'Casos'],
-        'Muestras_Lab': ['Fecha_Envio', 'Paciente_Identificacion', 'Municipio', 'Tipo_Muestra', 'Evento_Sospechoso', 'Estado', 'Resultado', 'Dias_Espera']
+        'Muestras_Lab': ['Fecha_Envio', 'Paciente_Identificacion', 'Municipio', 'Tipo_Muestra', 'Evento_Sospechoso', 'Estado', 'Resultado', 'Dias_Espera'],
+        'Riesgos_VSP': ['Fecha_Registro', 'Categoria', 'Descripcion', 'Municipio', 'Probabilidad', 'Impacto', 'Nivel_Riesgo', 'Responsable', 'Estado', 'Mitigacion']
     }
     
     if not os.path.exists(ARCHIVO_DB):
@@ -315,7 +316,7 @@ def cargar_datos(hoja):
         df = pd.read_excel(ARCHIVO_DB, sheet_name=hoja)
         if hoja == 'Usuarios' and 'Permisos' not in df.columns:
             df['Permisos'] = "🏠 Inicio,📝 Registrar Actividad"
-        return df.fillna("").astype(str) if hoja in ['Disponibilidad', 'Compromisos', 'Actas', 'Alertas_Inventario', 'Historial_Enlaces', 'Usuarios', 'VBC_Rumores', 'Directorio_Contactos', 'Solicitudes_Externas', 'Solicitudes_Teams', 'Brotes_ERI', 'Tablero_Problemas', 'Auditoria_Logs'] else df.fillna("")
+        return df.fillna("").astype(str) if hoja in ['Disponibilidad', 'Compromisos', 'Actas', 'Alertas_Inventario', 'Historial_Enlaces', 'Usuarios', 'VBC_Rumores', 'Directorio_Contactos', 'Solicitudes_Externas', 'Solicitudes_Teams', 'Brotes_ERI', 'Tablero_Problemas', 'Auditoria_Logs', 'Riesgos_VSP'] else df.fillna("")
     except Exception as e:
         st.error(f"Error al leer la pestaña {hoja}: {e}")
         return pd.DataFrame()
@@ -597,10 +598,21 @@ for idx, sec in enumerate(secciones_4):
                 st.session_state["seccion_actual"] = sec; st.rerun()
 
 # Quinta fila para panel de control y seguridad
-secciones_5 = ["⚙️ Panel Maestro y Roles", "🕵️ Auditoría y Logs"]
+secciones_5 = ["⚠️ Gestión del Riesgo", "⚙️ Panel Maestro y Roles", "🕵️ Auditoría y Logs"]
 nav_cols_5 = st.columns(len(secciones_5))
 for idx, sec in enumerate(secciones_5):
     with nav_cols_5[idx]:
+        if sec not in st.session_state.get("permisos_conectado", []) and st.session_state.get("rol_conectado") != "Administrador Total":
+            st.button(sec, use_container_width=True, disabled=True)
+        else:
+            if st.button(sec, use_container_width=True, type="primary" if st.session_state["seccion_actual"] == sec else "secondary"):
+                st.session_state["seccion_actual"] = sec; st.rerun()
+
+# Sexta fila para módulos misceláneos
+secciones_6 = ["🚨 Brotes y ERI", "🛑 Tablero de Problemas", "🤖 Asistente Redactor VSP"]
+nav_cols_6 = st.columns(len(secciones_6))
+for idx, sec in enumerate(secciones_6):
+    with nav_cols_6[idx]:
         if sec not in st.session_state.get("permisos_conectado", []) and st.session_state.get("rol_conectado") != "Administrador Total":
             st.button(sec, use_container_width=True, disabled=True)
         else:
@@ -629,6 +641,7 @@ def vista_inicio():
     df_ips = cargar_datos('IPS_UPGD')
     df_casos = cargar_datos('Casos_Criticos')
     df_muestras = cargar_datos('Muestras_Lab')
+    df_riesgos = cargar_datos('Riesgos_VSP')
     
     # Calcular KPIs
     # 1. Silencio Epi
@@ -658,14 +671,25 @@ def vista_inicio():
         muestras_mora = len(df_muestras[(df_muestras["Estado"] == "Enviada / Pendiente") & (pd.to_numeric(df_muestras["Dias_Espera"], errors='coerce') > 5)]) if not df_muestras.empty else 0
     except Exception:
         muestras_mora = 0
+        
+    # 5. Riesgos Extremos Activos
+    try:
+        if not df_riesgos.empty:
+            riesgos_activos = df_riesgos[df_riesgos['Estado'] != "Cerrado/Controlado"]
+            riesgos_extremos = len(riesgos_activos[riesgos_activos['Nivel_Riesgo'].str.contains("Extremo", na=False)])
+        else:
+            riesgos_extremos = 0
+    except Exception:
+        riesgos_extremos = 0
     
     # Mostrar KPIs
     st.markdown("### 📊 Panel de Alertas Globales")
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns(5)
     c1.markdown(f"<div class='metric-card' style='border-left: 5px solid #ef4444;'>⚠️ <b>Silencio Epi</b><h2 style='color:#ef4444; margin:0;'>{ips_silencio} <span style='font-size:1rem; color:#94a3b8;'>/ {total_ips}</span></h2><small>Clínicas sin reporte</small></div>", unsafe_allow_html=True)
     c2.markdown(f"<div class='metric-card' style='border-left: 5px solid #f97316;'>🚨 <b>Casos Críticos</b><h2 style='color:#f97316; margin:0;'>{casos_mora}</h2><small>En mora > 7 días</small></div>", unsafe_allow_html=True)
-    c3.markdown(f"<div class='metric-card' style='border-left: 5px solid #10b981;'>✅ <b>Gestión Técnica</b><h2 style='color:#10b981; margin:0;'>{porc_cumplimiento}%</h2><small>Compromisos cumplidos</small></div>", unsafe_allow_html=True)
-    c4.markdown(f"<div class='metric-card' style='border-left: 5px solid #3b82f6;'>🧪 <b>Laboratorio</b><h2 style='color:#3b82f6; margin:0;'>{muestras_mora}</h2><small>Muestras retrasadas > 5d</small></div>", unsafe_allow_html=True)
+    c3.markdown(f"<div class='metric-card' style='border-left: 5px solid #b91c1c;'>🔴 <b>Riesgos Ext.</b><h2 style='color:#b91c1c; margin:0;'>{riesgos_extremos}</h2><small>Amenazas críticas</small></div>", unsafe_allow_html=True)
+    c4.markdown(f"<div class='metric-card' style='border-left: 5px solid #10b981;'>✅ <b>Gestión Téc.</b><h2 style='color:#10b981; margin:0;'>{porc_cumplimiento}%</h2><small>Compromisos listos</small></div>", unsafe_allow_html=True)
+    c5.markdown(f"<div class='metric-card' style='border-left: 5px solid #3b82f6;'>🧪 <b>Laboratorio</b><h2 style='color:#3b82f6; margin:0;'>{muestras_mora}</h2><small>Muestras retrasadas</small></div>", unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -2771,11 +2795,116 @@ def vista_muestras_laboratorio():
                         st.rerun()
                 st.markdown("<br>", unsafe_allow_html=True)
 
+def vista_gestion_riesgos():
+    st.markdown("<h2 class='main-title'>⚠️ Gestión del Riesgo Epidemiológico y Operativo</h2>", unsafe_allow_html=True)
+    st.markdown("<p class='sub-title'>Identificación, evaluación y mitigación de amenazas departamentales.</p>", unsafe_allow_html=True)
+    
+    df_riesgos = cargar_datos('Riesgos_VSP')
+    
+    t_reg, t_matriz, t_mitigacion = st.tabs(["📝 Identificar Riesgo", "🚥 Matriz de Calor", "🛡️ Mitigación"])
+    
+    with t_reg:
+        with st.form("form_nuevo_riesgo", clear_on_submit=True):
+            r_fecha = st.date_input("Fecha de Identificación:", value=datetime.today())
+            
+            c_r1, c_r2 = st.columns(2)
+            r_cat = c_r1.selectbox("Categoría del Riesgo:", ["Biológico / Epidemiológico", "Desastre Natural", "Operativo / Logístico", "Tecnológico / Sistemas", "Social / Orden Público"])
+            r_mun = c_r2.selectbox("Municipio Afectado (o Departamental):", ["Nivel Departamental"] + LISTA_MUNICIPIOS)
+            
+            r_desc = st.text_area("Descripción de la Amenaza o Escenario:")
+            
+            st.markdown("##### Evaluación del Riesgo (Impacto x Probabilidad)")
+            c_e1, c_e2 = st.columns(2)
+            r_prob = c_e1.selectbox("Probabilidad de Ocurrencia (1 a 5):", [1, 2, 3, 4, 5], index=2, format_func=lambda x: f"{x} - " + ["Improbable", "Poco Probable", "Posible", "Probable", "Casi Seguro"][x-1])
+            r_imp = c_e2.selectbox("Impacto si se Materializa (1 a 5):", [1, 2, 3, 4, 5], index=2, format_func=lambda x: f"{x} - " + ["Leve", "Menor", "Moderado", "Mayor", "Catastrófico"][x-1])
+            
+            r_resp = st.selectbox("Funcionario Encargado de Vigilancia/Mitigación:", LISTA_RESPONSABLES)
+            
+            btn_riesgo = st.form_submit_button("Guardar Riesgo Identificado", type="primary")
+            
+            if btn_riesgo and r_desc.strip() != "":
+                puntaje = r_prob * r_imp
+                if puntaje <= 4: nivel = "Bajo 🟢"
+                elif puntaje <= 9: nivel = "Medio 🟡"
+                elif puntaje <= 15: nivel = "Alto 🟠"
+                else: nivel = "Extremo 🔴"
+                
+                nuevo_r = pd.DataFrame([{
+                    "Fecha_Registro": r_fecha.strftime("%Y-%m-%d"),
+                    "Categoria": r_cat,
+                    "Descripcion": r_desc,
+                    "Municipio": r_mun,
+                    "Probabilidad": r_prob,
+                    "Impacto": r_imp,
+                    "Nivel_Riesgo": nivel,
+                    "Responsable": r_resp,
+                    "Estado": "Activo",
+                    "Mitigacion": "Sin acciones registradas aún."
+                }])
+                
+                guardar_datos(pd.concat([df_riesgos, nuevo_r], ignore_index=True), 'Riesgos_VSP')
+                st.session_state["mensaje_exito_temp"] = f"✅ Riesgo registrado exitosamente. Nivel asignado: {nivel}"
+                st.rerun()
+
+    with t_matriz:
+        st.markdown("### Mapa de Riesgos Actuales")
+        if df_riesgos.empty:
+            st.info("No hay riesgos registrados en el sistema.")
+        else:
+            col_b, col_m, col_a, col_e = st.columns(4)
+            bajos = len(df_riesgos[df_riesgos['Nivel_Riesgo'].str.contains("Bajo", na=False)])
+            medios = len(df_riesgos[df_riesgos['Nivel_Riesgo'].str.contains("Medio", na=False)])
+            altos = len(df_riesgos[df_riesgos['Nivel_Riesgo'].str.contains("Alto", na=False)])
+            extremos = len(df_riesgos[df_riesgos['Nivel_Riesgo'].str.contains("Extremo", na=False)])
+            
+            col_b.metric("🟢 Riesgo Bajo", bajos)
+            col_m.metric("🟡 Riesgo Medio", medios)
+            col_a.metric("🟠 Riesgo Alto", altos)
+            col_e.metric("🔴 Riesgo Extremo", extremos)
+            
+            st.markdown("#### Detalle de Matriz")
+            df_activos = df_riesgos[df_riesgos['Estado'].isin(["Activo", "En Mitigación", "Materializado"])]
+            if not df_activos.empty:
+                st.dataframe(df_activos[["Nivel_Riesgo", "Categoria", "Descripcion", "Municipio", "Estado", "Responsable"]], use_container_width=True, hide_index=True)
+            else:
+                st.success("🎉 Todos los riesgos han sido cerrados o controlados.")
+
+    with t_mitigacion:
+        st.markdown("### Seguimiento y Control de Riesgos")
+        if df_riesgos.empty:
+            st.info("No hay riesgos registrados.")
+        else:
+            activos = df_riesgos[df_riesgos['Estado'] != "Cerrado/Controlado"]
+            
+            if activos.empty:
+                st.success("✅ No hay riesgos pendientes por gestionar.")
+            else:
+                for idx, row in activos.iterrows():
+                    with st.expander(f"{row['Nivel_Riesgo']} | {row['Categoria']} - {row['Municipio']}", expanded=(row['Nivel_Riesgo'].startswith("Extremo"))):
+                        st.markdown(f"**Descripción:** {row['Descripcion']}")
+                        st.markdown(f"**Responsable:** {row['Responsable']} | **Fecha Registro:** {row['Fecha_Registro']}")
+                        
+                        with st.form(f"form_mitig_{idx}"):
+                            try:
+                                index_estado = ["Activo", "En Mitigación", "Materializado", "Cerrado/Controlado"].index(row['Estado'])
+                            except ValueError:
+                                index_estado = 0
+                            nuevo_estado = st.selectbox("Estado del Riesgo:", ["Activo", "En Mitigación", "Materializado", "Cerrado/Controlado"], index=index_estado)
+                            nueva_mitigacion = st.text_area("Acciones de Mitigación / Contingencia:", value=str(row['Mitigacion']))
+                            
+                            if st.form_submit_button("Actualizar Seguimiento", type="primary"):
+                                df_riesgos.at[idx, 'Estado'] = nuevo_estado
+                                df_riesgos.at[idx, 'Mitigacion'] = nueva_mitigacion
+                                guardar_datos(df_riesgos, 'Riesgos_VSP')
+                                st.session_state["mensaje_exito_temp"] = "Estado del riesgo actualizado correctamente."
+                                st.rerun()
+
 # ==========================================
 # 8. ENRUTADOR PRINCIPAL DE LA APLICACIÓN
 # ==========================================
 mapeo_vistas = {
     "🏠 Inicio": vista_inicio,
+    "⚠️ Gestión del Riesgo": vista_gestion_riesgos,
     "📝 Registrar Actividad": vista_registrar_actividad,
     "🛡️ Disponibilidad Semanal": vista_disponibilidad_semanal,
     "📋 Compromisos Técnicos": vista_compromisos_tecnicos,
@@ -2796,7 +2925,8 @@ mapeo_vistas = {
     "🤖 Asistente Protocolos": vista_asistente_ins,
     "📊 Tablero Avanzado": vista_dashboard_sivigila,
     "⚙️ Panel Maestro y Roles": vista_panel_maestro,
-    "🕵️ Auditoría y Logs": vista_auditoria
+    "🕵️ Auditoría y Logs": vista_auditoria,
+    "🧪 Muestras de Laboratorio": vista_muestras_laboratorio
 }
 
 if st.session_state["seccion_actual"] in mapeo_vistas:
