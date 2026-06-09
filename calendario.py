@@ -275,7 +275,8 @@ def inicializar_db():
         'IPS_UPGD': ['Municipio', 'Nombre_IPS', 'Codigo_Sede', 'Reporto_Ultima_Semana', 'Fecha_Ultimo_Reporte'],
         'Boletines_Data': ['Semana', 'Municipio', 'Evento', 'Edad', 'Sexo', 'Casos'],
         'Muestras_Lab': ['Fecha_Envio', 'Paciente_Identificacion', 'Municipio', 'Tipo_Muestra', 'Evento_Sospechoso', 'Estado', 'Resultado', 'Dias_Espera'],
-        'Riesgos_VSP': ['Fecha_Registro', 'Categoria', 'Descripcion', 'Municipio', 'Probabilidad', 'Impacto', 'Nivel_Riesgo', 'Responsable', 'Estado', 'Mitigacion']
+        'Riesgos_VSP': ['Fecha_Registro', 'Categoria', 'Descripcion', 'Municipio', 'Probabilidad', 'Impacto', 'Nivel_Riesgo', 'Responsable', 'Estado', 'Mitigacion'],
+        'Cumpleanos': ['Funcionario', 'Fecha_Nacimiento']
     }
     
     if not os.path.exists(ARCHIVO_DB):
@@ -316,7 +317,7 @@ def cargar_datos(hoja):
         df = pd.read_excel(ARCHIVO_DB, sheet_name=hoja)
         if hoja == 'Usuarios' and 'Permisos' not in df.columns:
             df['Permisos'] = "🏠 Inicio,📝 Registrar Actividad"
-        return df.fillna("").astype(str) if hoja in ['Disponibilidad', 'Compromisos', 'Actas', 'Alertas_Inventario', 'Historial_Enlaces', 'Usuarios', 'VBC_Rumores', 'Directorio_Contactos', 'Solicitudes_Externas', 'Solicitudes_Teams', 'Brotes_ERI', 'Tablero_Problemas', 'Auditoria_Logs', 'Riesgos_VSP'] else df.fillna("")
+        return df.fillna("").astype(str) if hoja in ['Disponibilidad', 'Compromisos', 'Actas', 'Alertas_Inventario', 'Historial_Enlaces', 'Usuarios', 'VBC_Rumores', 'Directorio_Contactos', 'Solicitudes_Externas', 'Solicitudes_Teams', 'Brotes_ERI', 'Tablero_Problemas', 'Auditoria_Logs', 'Riesgos_VSP', 'Cumpleanos'] else df.fillna("")
     except Exception as e:
         st.error(f"Error al leer la pestaña {hoja}: {e}")
         return pd.DataFrame()
@@ -610,6 +611,8 @@ for idx, sec in enumerate(secciones_5):
 
 # Sexta fila para módulos misceláneos
 secciones_6 = ["🚨 Brotes y ERI", "🛑 Tablero de Problemas", "🤖 Asistente Redactor VSP"]
+if st.session_state.get("rol_conectado") == "Administrador Total":
+    secciones_6.append("🎂 Gestionar Cumpleaños")
 nav_cols_6 = st.columns(len(secciones_6))
 for idx, sec in enumerate(secciones_6):
     with nav_cols_6[idx]:
@@ -642,6 +645,48 @@ def vista_inicio():
     df_casos = cargar_datos('Casos_Criticos')
     df_muestras = cargar_datos('Muestras_Lab')
     df_riesgos = cargar_datos('Riesgos_VSP')
+    
+    # Inyectar Cumpleaños y Validar si hay hoy
+    df_cump = cargar_datos('Cumpleanos')
+    if not df_cump.empty:
+        cumpleaneros_hoy = []
+        hoy_str = hoy.strftime("%m-%d")
+        eventos_cumple = []
+        
+        for _, row in df_cump.iterrows():
+            f_nac = str(row['Fecha_Nacimiento'])
+            if f_nac == hoy_str:
+                cumpleaneros_hoy.append(row['Funcionario'])
+                
+            try:
+                mes, dia = f_nac.split('-')
+                fecha_evento = datetime(hoy.year, int(mes), int(dia)).strftime("%Y-%m-%d")
+                eventos_cumple.append({
+                    'Fecha': fecha_evento,
+                    'Hora Inicio': '08:00',
+                    'Hora Fin': '17:00',
+                    'Responsable': row['Funcionario'],
+                    'Tipo de Evento': '🎂 CUMPLEAÑOS',
+                    'Municipio': 'Sede Departamental',
+                    'Lugar': 'Oficina VSP',
+                    'Vehículo': 'No',
+                    'Estado': 'Confirmado',
+                    'Observaciones': 'Celebración'
+                })
+            except Exception:
+                pass
+                
+        if eventos_cumple:
+            df_eventos_cump = pd.DataFrame(eventos_cumple)
+            if df_meta.empty:
+                df_meta = df_eventos_cump
+            else:
+                df_meta = pd.concat([df_meta, df_eventos_cump], ignore_index=True)
+                
+        if cumpleaneros_hoy:
+            st.balloons()
+            nombres = ", ".join(cumpleaneros_hoy)
+            st.markdown(f"<div style='background-color: #ffdeeb; padding: 20px; border-radius: 10px; border-left: 5px solid #ff4785; margin-bottom: 20px;'><h2 style='color: #ff4785; margin:0;'>🎉 ¡Feliz Cumpleaños! 🎂</h2><h4 style='color: #333; margin:0;'>Hoy celebramos el cumpleaños de: <b>{nombres}</b></h4></div>", unsafe_allow_html=True)
     
     # Calcular KPIs
     # 1. Silencio Epi
@@ -828,7 +873,23 @@ def vista_inicio():
             })
     
     st.markdown("<div style='background: rgba(30,41,59,0.3); padding:20px; border-radius:16px;'>", unsafe_allow_html=True)
-    interaccion_cal = calendar(events=eventos_list, options={"locale": "es", "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,timeGridWeek"}}, key="cal_vsp_interactivo")
+    css_calendar = """
+    .fc-event-title {
+        white-space: normal !important;
+        overflow: hidden;
+        font-size: 0.85em;
+        padding: 2px;
+    }
+    .fc-event-time {
+        display: none !important;
+    }
+    """
+    opciones_cal = {
+        "locale": "es", 
+        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,timeGridWeek"},
+        "dayMaxEvents": True
+    }
+    interaccion_cal = calendar(events=eventos_list, options=opciones_cal, custom_css=css_calendar, key="cal_vsp_interactivo")
     st.markdown("</div>", unsafe_allow_html=True)
     
     if interaccion_cal:
@@ -1056,10 +1117,15 @@ def vista_disponibilidad_semanal():
                     "center": "title",
                     "right": "dayGridMonth,timeGridWeek"
                 },
-                "initialView": "dayGridMonth"
+                "initialView": "dayGridMonth",
+                "dayMaxEvents": True
             }
             
-            calendar(events=eventos_lista, options=cal_options)
+            css_cal2 = """
+            .fc-event-title { white-space: normal !important; overflow: hidden; font-size: 0.85em; padding: 2px; }
+            .fc-event-time { display: none !important; }
+            """
+            calendar(events=eventos_lista, options=cal_options, custom_css=css_cal2)
         except Exception as e:
             st.warning("No se pudo cargar el calendario gráfico interactivo.")
 
@@ -2899,6 +2965,46 @@ def vista_gestion_riesgos():
                                 st.session_state["mensaje_exito_temp"] = "Estado del riesgo actualizado correctamente."
                                 st.rerun()
 
+def vista_gestion_cumpleanos():
+    if st.session_state.get("rol_conectado") != "Administrador Total":
+        st.error("No tienes permisos para ver este módulo.")
+        return
+
+    st.markdown("<h2 class='main-title'>🎂 Gestión de Cumpleaños</h2>", unsafe_allow_html=True)
+    st.markdown("<p class='sub-title'>Agrega las fechas de nacimiento del equipo. El sistema las inyectará automáticamente en el calendario cada año.</p>", unsafe_allow_html=True)
+    
+    df_cump = cargar_datos('Cumpleanos')
+    
+    with st.form("form_nuevo_cumpleanos", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        funcionario = c1.selectbox("Funcionario:", LISTA_RESPONSABLES)
+        fecha_nac = c2.date_input("Fecha de Nacimiento (El año no importa):")
+        
+        if st.form_submit_button("Añadir Cumpleaños", type="primary"):
+            fecha_str = fecha_nac.strftime("%m-%d")
+            if not df_cump.empty and funcionario in df_cump["Funcionario"].values:
+                df_cump.loc[df_cump["Funcionario"] == funcionario, "Fecha_Nacimiento"] = fecha_str
+            else:
+                nuevo = pd.DataFrame([{"Funcionario": funcionario, "Fecha_Nacimiento": fecha_str}])
+                df_cump = pd.concat([df_cump, nuevo], ignore_index=True)
+            guardar_datos(df_cump, 'Cumpleanos')
+            st.session_state["mensaje_exito_temp"] = "Cumpleaños guardado correctamente."
+            st.rerun()
+            
+    st.markdown("### Cumpleaños Registrados")
+    if not df_cump.empty:
+        for idx, row in df_cump.iterrows():
+            col1, col2, col3 = st.columns([3, 2, 1])
+            col1.write(f"**{row['Funcionario']}**")
+            col2.write(f"Fecha (Mes-Día): {row['Fecha_Nacimiento']}")
+            if col3.button("🗑️ Eliminar", key=f"del_cump_{idx}"):
+                df_cump = df_cump.drop(idx)
+                guardar_datos(df_cump, 'Cumpleanos')
+                st.session_state["mensaje_exito_temp"] = "Cumpleaños eliminado."
+                st.rerun()
+    else:
+        st.info("No hay cumpleaños registrados.")
+
 # ==========================================
 # 8. ENRUTADOR PRINCIPAL DE LA APLICACIÓN
 # ==========================================
@@ -2926,7 +3032,8 @@ mapeo_vistas = {
     "📊 Tablero Avanzado": vista_dashboard_sivigila,
     "⚙️ Panel Maestro y Roles": vista_panel_maestro,
     "🕵️ Auditoría y Logs": vista_auditoria,
-    "🧪 Muestras de Laboratorio": vista_muestras_laboratorio
+    "🧪 Muestras de Laboratorio": vista_muestras_laboratorio,
+    "🎂 Gestionar Cumpleaños": vista_gestion_cumpleanos
 }
 
 if st.session_state["seccion_actual"] in mapeo_vistas:
