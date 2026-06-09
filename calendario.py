@@ -1061,23 +1061,23 @@ def vista_compromisos_tecnicos():
                 st.dataframe(df_mostrar[["Fecha_Acuerdo", "Responsable", "Compromiso", "Plazo", "Estado", "Alerta", "Respuesta_Avance"]], use_container_width=True, hide_index=True)
                 
                 st.markdown("---")
-            st.markdown("#### 📱 Notificar por WhatsApp")
-            st.caption("Envía un recordatorio rápido directo al responsable del compromiso (abre WhatsApp Web/App).")
+            # st.markdown("#### 💬 Notificar por WhatsApp")
+            # st.caption("Envía un recordatorio rápido directo al responsable del compromiso (abre WhatsApp Web/App).")
             
-            # Evitar fallos por emojis usando str.contains
-            pendientes = df_mostrar[df_mostrar["Estado"].astype(str).str.contains("PENDIENTE", case=False, na=False)]
-            if pendientes.empty:
-                st.success("🎉 Todos los compromisos están finalizados. No hay notificaciones pendientes.")
-            else:
-                for idx, row in pendientes.iterrows():
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.markdown(f"**{row['Responsable']}**: {str(row['Compromiso'])[:50]}... (Plazo: {row['Plazo']})")
-                    with col2:
-                        import urllib.parse
-                        cuerpo = urllib.parse.quote(f"Hola {row['Responsable']},\n\nTe escribo desde el sistema VSP para recordarte el siguiente compromiso que se encuentra pendiente o en proceso:\n\n📌 *Tarea:* {row['Compromiso']}\n⏰ *Plazo Máximo:* {row['Plazo']}\n\nPor favor adjuntar los soportes en la plataforma.\n\nGracias.")
-                        wa_link = f"https://wa.me/?text={cuerpo}"
-                        st.markdown(f"<a href='{wa_link}' target='_blank' style='display:inline-block; padding: 5px 10px; background-color: #25D366; color: white; border-radius: 5px; text-decoration: none; font-size: 0.8rem; margin-top: 2px;'>🟩 Enviar WhatsApp</a>", unsafe_allow_html=True)
+            # # Evitar fallos por emojis usando str.contains
+            # pendientes = df_mostrar[df_mostrar["Estado"].astype(str).str.contains("PENDIENTE", case=False, na=False)]
+            # if pendientes.empty:
+            #     st.success("✅ Todos los compromisos están finalizados. No hay notificaciones pendientes.")
+            # else:
+            #     for idx, row in pendientes.iterrows():
+            #         col1, col2 = st.columns([3, 1])
+            #         with col1:
+            #             st.markdown(f"**{row['Responsable']}**: {str(row['Compromiso'])[:50]}... (Plazo: {row['Plazo']})")
+            #         with col2:
+            #             import urllib.parse
+            #             cuerpo = urllib.parse.quote(f"Hola {row['Responsable']},\n\nTe escribo desde el sistema VSP para recordarte el siguiente compromiso que se encuentra pendiente o en proceso:\n\n📌 *Tarea:* {row['Compromiso']}\n⏰ *Plazo Máximo:* {row['Plazo']}\n\nPor favor adjuntar los soportes en la plataforma.\n\nGracias.")
+            #             wa_link = f"https://wa.me/?text={cuerpo}"
+            #             st.markdown(f"<a href='{wa_link}' target='_blank' style='display:inline-block; padding: 5px 10px; background-color: #25D366; color: white; border-radius: 5px; text-decoration: none; font-size: 0.8rem; margin-top: 2px;'>🟩 Enviar WhatsApp</a>", unsafe_allow_html=True)
                         
             st.markdown("---")
             st.markdown("#### 📄 Generador Oficial de Actas (PDF)")
@@ -1342,21 +1342,21 @@ def vista_enlaces_hc():
                     # Mostrar tabla con estado
                     st.dataframe(df_teams[["Fecha_Evento", "Tema", "Responsable_Evento", "Estado"]], use_container_width=True, hide_index=True)
                     
-                    st.markdown("#### 📱 Recordatorio por WhatsApp")
-                    st.caption("Solicita el link de la reunión directamente por WhatsApp a quien corresponda.")
+                    # st.markdown("#### 💬 Recordatorio por WhatsApp")
+                    # st.caption("Solicita el link de la reunión directamente por WhatsApp a quien corresponda.")
                     
-                    # Evitar fallos por emojis usando str.contains
-                    pendientes_w = df_teams[df_teams["Estado"].astype(str).str.contains("PENDIENTE", case=False, na=False)]
-                    if not pendientes_w.empty:
-                        for idx, row in pendientes_w.iterrows():
-                            col1, col2 = st.columns([3, 1])
-                            with col1:
-                                st.markdown(f"**{row['Tema']}** ({row['Fecha_Evento']})")
-                            with col2:
-                                import urllib.parse
-                                cuerpo_w = urllib.parse.quote(f"Hola,\n\nTe escribo para solicitar la creación urgente de un enlace de Teams para el evento:\n\n📌 *Tema:* {row['Tema']}\n⏰ *Fecha/Hora:* {row['Fecha_Evento']}\n\nPor favor ingresa al sistema VSP y asígnalo lo más pronto posible.\n\nGracias.")
-                                wa_link = f"https://wa.me/?text={cuerpo_w}"
-                                st.markdown(f"<a href='{wa_link}' target='_blank' style='display:inline-block; padding: 5px 10px; background-color: #25D366; color: white; border-radius: 5px; text-decoration: none; font-size: 0.8rem; margin-top: 2px;'>🟩 Pedir Link</a>", unsafe_allow_html=True)
+                    # # Evitar fallos por emojis usando str.contains
+                    # pendientes_w = df_teams[df_teams["Estado"].astype(str).str.contains("PENDIENTE", case=False, na=False)]
+                    # if not pendientes_w.empty:
+                    #     for idx, row in pendientes_w.iterrows():
+                    #         col1, col2 = st.columns([3, 1])
+                    #         with col1:
+                    #             st.markdown(f"**{row['Tema']}** ({row['Fecha_Evento']})")
+                    #         with col2:
+                    #             import urllib.parse
+                    #             cuerpo_w = urllib.parse.quote(f"Hola,\n\nTe escribo para solicitar la creación urgente de un enlace de Teams para el evento:\n\n📌 *Tema:* {row['Tema']}\n⏰ *Fecha/Hora:* {row['Fecha_Evento']}\n\nPor favor ingresa al sistema VSP y asígnalo lo más pronto posible.\n\nGracias.")
+                    #             wa_link = f"https://wa.me/?text={cuerpo_w}"
+                    #             st.markdown(f"<a href='{wa_link}' target='_blank' style='display:inline-block; padding: 5px 10px; background-color: #25D366; color: white; border-radius: 5px; text-decoration: none; font-size: 0.8rem; margin-top: 2px;'>💬 Pedir Link</a>", unsafe_allow_html=True)
                     
                     st.markdown("---")
                     st.markdown("#### 🔗 Asignación de Links (Para uso del Encargado)")
@@ -1586,7 +1586,14 @@ def vista_actas_informes():
         
         c_tipo, c_fecha = st.columns(2)
         tipo_doc_consecutivo = c_tipo.selectbox("Tipo de Documento Oficial:", ["ACTA (Reuniones/Comités)", "CIRCULAR (Interna/Lineamientos)", "MEMORANDO (Interno)", "OFICIO (Interno)", "OTRO (Externo/Recibido)"])
-        fecha_consecutivo = c_fecha.date_input("Fecha del Documento:", value=datetime.today(), min_value=datetime.today() - timedelta(days=5), max_value=datetime.today())
+        if st.session_state.get("rol_conectado", "") == "Administrador Total":
+            min_val = datetime.today() - timedelta(days=4)
+            max_val = datetime.today() + timedelta(days=4)
+        else:
+            min_val = datetime.today()
+            max_val = datetime.today()
+            
+        fecha_consecutivo = c_fecha.date_input("Fecha del Documento:", value=datetime.today(), min_value=min_val, max_value=max_val)
         
         # Determinar prefijo
         if "ACTA" in tipo_doc_consecutivo: prefijo = "ACTA-VSP"
