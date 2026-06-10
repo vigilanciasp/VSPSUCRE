@@ -414,6 +414,13 @@ def enviar_correo_outlook(destinatario, asunto, cuerpo, adjunto=None):
             msg.attach(part)
         
         import socket
+        # Forzar IPv4 para evitar el error [Errno 101] Network is unreachable en Railway (IPv6 routing bug)
+        old_getaddrinfo = socket.getaddrinfo
+        def new_getaddrinfo(*args, **kwargs):
+            res = old_getaddrinfo(*args, **kwargs)
+            return [r for r in res if r[0] == socket.AF_INET] # Solo IPv4
+        socket.getaddrinfo = new_getaddrinfo
+        
         try:
             server = smtplib.SMTP('smtp.office365.com', 587, timeout=10)
             server.starttls()
