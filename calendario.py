@@ -2212,17 +2212,40 @@ def vista_sivigila():
     
     archivo_global = st.file_uploader("📂 Cargar Base de Datos SIVIGILA Central", type=["csv", "xlsx"], key="global_siv")
     
+    import os
+    CACHE_FILE = "SIVIGILA_CACHE_DATA.csv"
+    df_siv_cache = pd.DataFrame()
+    archivo_valido = False
+    
     if archivo_global:
         try:
-            with st.spinner("Leyendo base de datos..."):
+            with st.spinner("Guardando en la nube y leyendo..."):
                 if archivo_global.name.endswith(".csv"):
-                    df_siv = pd.read_csv(archivo_global, encoding='latin1', sep=';')
-                    if len(df_siv.columns) < 5: df_siv = pd.read_csv(archivo_global, encoding='utf-8', sep=',')
+                    df_siv_cache = pd.read_csv(archivo_global, encoding='latin1', sep=';')
+                    if len(df_siv_cache.columns) < 5: df_siv_cache = pd.read_csv(archivo_global, encoding='utf-8', sep=',')
                 else:
-                    df_siv = pd.read_excel(archivo_global)
-            
-            st.success(f"✅ Archivo cargado correctamente: {len(df_siv)} registros analizados.")
-            
+                    df_siv_cache = pd.read_excel(archivo_global)
+                
+                df_siv_cache.to_csv(CACHE_FILE, index=False, encoding='utf-8-sig')
+                archivo_valido = True
+                st.success(f"✅ Archivo cargado y guardado en memoria caché: {len(df_siv_cache)} registros analizados.")
+        except Exception as e:
+            st.error(f"Error procesando: {e}")
+    elif os.path.exists(CACHE_FILE):
+        try:
+            df_siv_cache = pd.read_csv(CACHE_FILE, encoding='utf-8-sig')
+            archivo_valido = True
+            col1, col2 = st.columns([0.8, 0.2])
+            col1.info(f"🕒 Mostrando base recuperada de la memoria caché ({len(df_siv_cache)} registros). Sube un archivo nuevo para reemplazarla.")
+            if col2.button("🗑️ Borrar Caché"):
+                os.remove(CACHE_FILE)
+                st.rerun()
+        except:
+            pass
+
+    if archivo_valido:
+        try:
+            df_siv = df_siv_cache.copy()
             df_siv.columns = df_siv.columns.astype(str).str.strip()
             cols_lower = df_siv.columns.str.lower()
             
