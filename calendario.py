@@ -1,11 +1,13 @@
 import streamlit as st
 from streamlit_calendar import calendar
 import pandas as pd
+import numpy as np
 from datetime import datetime, time, timedelta
 import io
 import os
 import urllib.parse
-
+import plotly.express as px
+from fpdf import FPDF
 # ==========================================
 # 1. CONFIGURACIÓN E INYECCIÓN DE ESTILOS CSS
 # ==========================================
@@ -390,23 +392,26 @@ def generar_pdf_oficial(titulo, texto_cuerpo, autor):
         st.error(f"Error generando PDF: {e}")
         return None
 
-def enviar_correo_outlook(destinatario, asunto, cuerpo):
+def enviar_correo_outlook(destinatario, asunto, cuerpo, adjunto=None):
     try:
-        if "EMAIL_SENDER" not in st.secrets or "EMAIL_PASSWORD" not in st.secrets:
-            return False, "Credenciales no configuradas. Crea el archivo .streamlit/secrets.toml con EMAIL_LOGIN, EMAIL_PASSWORD y EMAIL_SENDER."
+        from email.mime.application import MIMEApplication
+        remitente = os.environ.get("EMAIL_SENDER") or (st.secrets["EMAIL_SENDER"] if "EMAIL_SENDER" in st.secrets else None)
+        password = os.environ.get("EMAIL_PASSWORD") or (st.secrets["EMAIL_PASSWORD"] if "EMAIL_PASSWORD" in st.secrets else None)
+        login_user = os.environ.get("EMAIL_LOGIN") or (st.secrets.get("EMAIL_LOGIN") if "EMAIL_LOGIN" in st.secrets else remitente)
         
-        # El correo que aparecerá en el "De:" (el alias)
-        remitente = st.secrets["EMAIL_SENDER"]
-        password = st.secrets["EMAIL_PASSWORD"]
-        
-        # Si existe un EMAIL_LOGIN, lo usamos para autenticar, si no, usamos el remitente
-        login_user = st.secrets.get("EMAIL_LOGIN", remitente)
+        if not remitente or not password:
+            return False, "Credenciales no configuradas. Agrega EMAIL_SENDER y EMAIL_PASSWORD en las variables de entorno de Railway."
         
         msg = MIMEMultipart()
         msg['From'] = remitente
         msg['To'] = destinatario
         msg['Subject'] = asunto
         msg.attach(MIMEText(cuerpo, 'plain'))
+        
+        if adjunto is not None:
+            part = MIMEApplication(adjunto.getvalue(), Name=adjunto.name)
+            part['Content-Disposition'] = f'attachment; filename="{adjunto.name}"'
+            msg.attach(part)
         
         server = smtplib.SMTP('smtp.office365.com', 587)
         server.starttls()
@@ -610,7 +615,7 @@ for idx, sec in enumerate(secciones_5):
                 st.session_state["seccion_actual"] = sec; st.rerun()
 
 # Sexta fila para módulos misceláneos
-secciones_6 = ["🚨 Brotes y ERI", "🛑 Tablero de Problemas", "🤖 Asistente Redactor VSP"]
+secciones_6 = ["🦠 Brotes y ERI", "🛑 Tablero de Problemas", "🤖 Asistente Redactor VSP", "🪦 Sala de Mortalidades"]
 if st.session_state.get("rol_conectado") == "Administrador Total":
     secciones_6.append("🎂 Gestionar Cumpleaños")
 nav_cols_6 = st.columns(len(secciones_6))
@@ -1284,10 +1289,22 @@ def vista_enlaces_hc():
         with t_nueva_sol:
             shc_municipio = st.selectbox("Seleccione Municipio:", LISTA_MUNICIPIOS, key="shc_mun")
             shc_tipo_solicitud = st.selectbox("Tipo de Solicitud:", ["Historia Clínica", "Acta de Defunción", "Ficha Epidemiológica", "Resumen de Historia Clínica", "Otro"])
-            shc_paciente = st.text_input("Nombre Completo o Iniciales del Paciente:", placeholder="Ej: Juan Perez / J.A.P.M")
-            c_p1, c_p2 = st.columns(2)
-            shc_tipo_id = c_p1.selectbox("Tipo Doc:", ["C.C.", "T.I.", "R.C.", "P.E.P.", "C.E.", "S.I."])
-            shc_num_id = c_p2.text_input("Número ID:")
+            
+            st.markdown("##### 📄 Datos del Paciente")
+            st.info("Puedes digitar los datos de un paciente individual, o subir un listado Excel/CSV con múltiples pacientes.")
+            shc_archivo_listado = st.file_uploader("📂 Opcional: Subir listado de pacientes (Excel/CSV)", type=["xlsx", "csv"], key="shc_file")
+            
+            if shc_archivo_listado:
+                shc_paciente = "MÚLTIPLES PACIENTES (VER ADJUNTO)"
+                shc_tipo_id = "N/A"
+                shc_num_id = "N/A"
+                st.success(f"Archivo adjunto cargado: {shc_archivo_listado.name}")
+            else:
+                shc_paciente = st.text_input("Nombre Completo o Iniciales del Paciente:", placeholder="Ej: Juan Perez / J.A.P.M")
+                c_p1, c_p2 = st.columns(2)
+                shc_tipo_id = c_p1.selectbox("Tipo Doc:", ["C.C.", "T.I.", "R.C.", "P.E.P.", "C.E.", "S.I."])
+                shc_num_id = c_p2.text_input("Número ID:")
+                
             shc_eapb = st.text_input("EAPB / Aseguradora / Entidad:", placeholder="Ej: Coosalud / Hospital Local")
             c_f1, c_f2 = st.columns(2)
             shc_f_inicio = c_f1.date_input("Atención Desde:", value=datetime.today() - timedelta(days=7))
@@ -1296,13 +1313,17 @@ def vista_enlaces_hc():
             
             shc_correo_dest = st.text_input("Correo Institucional de Destino:", value=CORREO_DESTINO_HC)
             
-            cuerpo_correo = f"Cordial saludo,\n\nPor medio de la presente se solicita de manera urgente copia de {shc_tipo_solicitud.upper()} del paciente {shc_paciente} con identificación {shc_tipo_id} N° {shc_num_id}, afiliado/atendido en {shc_eapb} en el municipio de {shc_municipio}, correspondiente al período del {shc_f_inicio.strftime('%d/%m/%Y')} al {shc_f_fin.strftime('%d/%m/%Y')}.\n\nMOTIVO DE LA SOLICITUD:\n{shc_motivo}\n\nAgradecemos su pronta gestión.\n\nAtentamente,\nSubprograma de Vigilancia en Salud Pública (VSP) - Gobernación de Sucre."
-            asunto_correo = f"SOLICITUD URGENTE: {shc_tipo_solicitud.upper()} - {shc_municipio.upper()} ({shc_paciente})"
+            if shc_archivo_listado:
+                cuerpo_correo = f"Cordial saludo,\n\nPor medio de la presente se solicita de manera urgente copia de {shc_tipo_solicitud.upper()} del listado de pacientes adjunto a este correo, afiliados/atendidos en {shc_eapb} en el municipio de {shc_municipio}, correspondiente al período del {shc_f_inicio.strftime('%d/%m/%Y')} al {shc_f_fin.strftime('%d/%m/%Y')}.\n\nMOTIVO DE LA SOLICITUD:\n{shc_motivo}\n\nAgradecemos su pronta gestión.\n\nAtentamente,\nSubprograma de Vigilancia en Salud Pública (VSP) - Gobernación de Sucre."
+                asunto_correo = f"SOLICITUD URGENTE: {shc_tipo_solicitud.upper()} MÚLTIPLE - {shc_municipio.upper()}"
+            else:
+                cuerpo_correo = f"Cordial saludo,\n\nPor medio de la presente se solicita de manera urgente copia de {shc_tipo_solicitud.upper()} del paciente {shc_paciente} con identificación {shc_tipo_id} N° {shc_num_id}, afiliado/atendido en {shc_eapb} en el municipio de {shc_municipio}, correspondiente al período del {shc_f_inicio.strftime('%d/%m/%Y')} al {shc_f_fin.strftime('%d/%m/%Y')}.\n\nMOTIVO DE LA SOLICITUD:\n{shc_motivo}\n\nAgradecemos su pronta gestión.\n\nAtentamente,\nSubprograma de Vigilancia en Salud Pública (VSP) - Gobernación de Sucre."
+                asunto_correo = f"SOLICITUD URGENTE: {shc_tipo_solicitud.upper()} - {shc_municipio.upper()} ({shc_paciente})"
             
-            # El botón solo se habilitará si se escoge municipio y se digita un nombre
+            # El botón solo se habilitará si se escoge municipio y se digita un nombre (o se sube archivo)
             if shc_municipio != "Seleccione..." and shc_paciente.strip() != "": 
                 if st.button("🚀 Enviar y Registrar Automáticamente", use_container_width=True, type="primary"):
-                    exito, msg_err = enviar_correo_outlook(shc_correo_dest, asunto_correo, cuerpo_correo)
+                    exito, msg_err = enviar_correo_outlook(shc_correo_dest, asunto_correo, cuerpo_correo, adjunto=shc_archivo_listado)
                     if exito:
                         df_sol = cargar_datos('Solicitudes_Externas')
                         nueva_sol = pd.DataFrame([{
@@ -1930,7 +1951,7 @@ def vista_panel_maestro():
             else:
                 u_rol = u_rol_sel
             # Multi-select para los permisos exactos
-            lista_todas_vistas = list(mapeo_vistas.keys()) if 'mapeo_vistas' in globals() else ["🏠 Inicio", "📝 Registrar Actividad", "🛡️ Disponibilidad Semanal", "📋 Compromisos Técnicos", "🛠️ Enlaces y Solicitudes HC", "📄 Actas e Informes", "🚨 Alertas e Inventario", "🔍 Filtros y Dashboard", "⚙️ Panel Maestro y Roles", "🏘️ Vigilancia Comunitaria (VBC)", "📈 Tableros SIVIGILA", "🗺️ Georreferenciación", "🛡️ Calidad del Dato", "📞 Directorio de Red"]
+            lista_todas_vistas = list(mapeo_vistas.keys()) if 'mapeo_vistas' in globals() else ["🏠 Inicio", "📝 Registrar Actividad", "🧑‍⚕️ Disponibilidad Semanal", "🤝 Compromisos Técnicos", "📨 Enlaces y Solicitudes HC", "📁 Actas e Informes", "🚨 Alertas e Inventario", "📊 Filtros y Dashboard", "👑 Panel Maestro y Roles", "🏘️ Vigilancia Comunitaria (VBC)", "📊 Tableros SIVIGILA", "🗺️ Georreferenciación", "🛡️ Calidad del Dato", "📇 Directorio de Red", "🪦 Sala de Mortalidades"]
             u_permisos = st.multiselect("Permisos de Acceso a Módulos:", lista_todas_vistas, default=["🏠 Inicio", "📝 Registrar Actividad"])
             
             btn_add_user = st.form_submit_button("👥 Crear y Sincronizar Usuario")
@@ -1979,7 +2000,7 @@ def vista_panel_maestro():
                     e_rol = e_rol_sel
                 
                 permisos_actuales = [p.strip() for p in str(datos_u.get("Permisos", "🏠 Inicio,📝 Registrar Actividad")).split(",") if p.strip()]
-                lista_todas_vistas_f = list(mapeo_vistas.keys()) if 'mapeo_vistas' in globals() else ["🏠 Inicio", "📝 Registrar Actividad", "🛡️ Disponibilidad Semanal", "📋 Compromisos Técnicos", "🛠️ Enlaces y Solicitudes HC", "📄 Actas e Informes", "🚨 Alertas e Inventario", "🔍 Filtros y Dashboard", "🚨 Brotes y ERI", "🛑 Tablero de Problemas", "🏘️ Vigilancia Comunitaria (VBC)", "📈 Tableros SIVIGILA", "🛡️ Calidad del Dato", "📞 Directorio de Red", "🤖 Asistente Redactor VSP", "⚙️ Panel Maestro y Roles", "🛡️ Auditoría y Logs"]
+                lista_todas_vistas_f = list(mapeo_vistas.keys()) if 'mapeo_vistas' in globals() else ["🏠 Inicio", "📝 Registrar Actividad", "🧑‍⚕️ Disponibilidad Semanal", "🤝 Compromisos Técnicos", "📨 Enlaces y Solicitudes HC", "📁 Actas e Informes", "🚨 Alertas e Inventario", "📊 Filtros y Dashboard", "🦠 Brotes y ERI", "🛑 Tablero de Problemas", "🏘️ Vigilancia Comunitaria (VBC)", "📊 Tableros SIVIGILA", "🛡️ Calidad del Dato", "📇 Directorio de Red", "🤖 Asistente Redactor VSP", "👑 Panel Maestro y Roles", "🕵️ Auditoría y Logs", "🪦 Sala de Mortalidades"]
                 permisos_actuales = [p for p in permisos_actuales if p in lista_todas_vistas_f]
                 
                 nuevo_permiso = st.multiselect(f"Permisos de Módulos:", lista_todas_vistas_f, default=permisos_actuales, key=f"ms_{u_edit}")
@@ -2055,7 +2076,6 @@ def vista_vbc():
                 guardar_datos(pd.concat([df_vbc, nuevo_rumor], ignore_index=True), 'VBC_Rumores')
                 st.session_state["mensaje_exito_temp"] = "📢 Alerta comunitaria registrada exitosamente."
                 st.rerun()
-
     with t_matriz:
         if not df_vbc.empty:
             st.dataframe(df_vbc, use_container_width=True, hide_index=True)
@@ -2086,41 +2106,786 @@ def vista_vbc():
         else:
             st.info("Sin datos para analizar.")
 
+SUCRE_COORDENADAS = {
+    "SINCELEJO": {"lat": 9.3047, "lon": -75.3978},
+    "COROZAL": {"lat": 9.3142, "lon": -75.2952},
+    "SANTIAGO DE TOLU": {"lat": 9.5256, "lon": -75.5816},
+    "TOLU": {"lat": 9.5256, "lon": -75.5816},
+    "SAN ONOFRE": {"lat": 9.7358, "lon": -75.5269},
+    "COVENAS": {"lat": 9.4000, "lon": -75.6833},
+    "TOLUVIEJO": {"lat": 9.4500, "lon": -75.4333},
+    "MORROA": {"lat": 9.3400, "lon": -75.3100},
+    "LOS PALMITOS": {"lat": 9.3800, "lon": -75.2700},
+    "SAMPUES": {"lat": 9.1833, "lon": -75.3833},
+    "SAN MARCOS": {"lat": 8.6600, "lon": -75.1300},
+    "SUCRE": {"lat": 8.8100, "lon": -74.7200},
+    "GUARANDA": {"lat": 8.4600, "lon": -74.5300},
+    "MAJAGUAL": {"lat": 8.5400, "lon": -74.6200},
+    "SINCE": {"lat": 9.2400, "lon": -75.1500},
+    "GALERAS": {"lat": 9.1500, "lon": -75.0400},
+    "BETULIA": {"lat": 9.2700, "lon": -75.2400},
+    "SAN JUAN DE BETULIA": {"lat": 9.2700, "lon": -75.2400},
+    "BUENAVISTA": {"lat": 9.2300, "lon": -74.9800},
+    "SAN PEDRO": {"lat": 9.3800, "lon": -75.0500},
+    "EL ROBLE": {"lat": 9.1000, "lon": -75.1900},
+    "CAIMITO": {"lat": 8.8100, "lon": -75.1300},
+    "LA UNION": {"lat": 8.8600, "lon": -75.2800},
+    "SAN BENITO ABAD": {"lat": 8.9300, "lon": -75.0300},
+    "CHALAN": {"lat": 9.5500, "lon": -75.3200},
+    "COLOSO": {"lat": 9.5300, "lon": -75.3600},
+    "OVEJAS": {"lat": 9.5300, "lon": -75.2300}
+}
+
+class PDFBoletin(FPDF):
+    def header(self):
+        self.set_font('Arial', 'B', 15)
+        self.set_fill_color(0, 102, 204)
+        self.set_text_color(255, 255, 255)
+        self.cell(0, 15, 'Boletin Epidemiologico - VSP Sucre', 0, 1, 'C', 1)
+        self.ln(5)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.set_text_color(128, 128, 128)
+        self.cell(0, 10, f'Pagina {self.page_no()}', 0, 0, 'C')
+
+def generar_pdf_boletin(df, stats_dict):
+    pdf = PDFBoletin()
+    pdf.add_page()
+    pdf.set_font('Arial', '', 11)
+    
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, f"Fecha de Generacion: {datetime.today().strftime('%Y-%m-%d')}", 0, 1)
+    pdf.ln(5)
+    
+    pdf.set_font('Arial', 'B', 14)
+    pdf.cell(0, 10, '1. Resumen General de Casos', 0, 1)
+    pdf.set_font('Arial', '', 11)
+    pdf.multi_cell(0, 8, f"Se procesaron un total de {stats_dict['total_casos']} registros en la base de datos suministrada. De estos, los eventos con mayor incidencia registrada corresponden a las dinamicas epidemiologicas observadas en las semanas analizadas.")
+    
+    pdf.ln(5)
+    pdf.set_font('Arial', 'B', 14)
+    pdf.cell(0, 10, '2. Analisis de Mora en Notificacion', 0, 1)
+    pdf.set_font('Arial', '', 11)
+    pdf.multi_cell(0, 8, f"La mora promedio departamental calculada es de {stats_dict['mora_promedio']} dias, con un pico maximo de mora registrado de {stats_dict['mora_max']} dias.")
+    
+    pdf.ln(5)
+    pdf.set_font('Arial', 'B', 14)
+    pdf.cell(0, 10, '3. Hospitales / UPGD Criticas', 0, 1)
+    pdf.set_font('Arial', '', 11)
+    pdf.multi_cell(0, 8, "Las siguientes instituciones presentaron demoras significativas en sus reportes, superando los promedios esperados de captura:")
+    for inst in stats_dict['peores_upgd']:
+        inst_clean = inst.encode('latin-1', 'replace').decode('latin-1')
+        pdf.cell(0, 8, f" - {inst_clean}", 0, 1)
+        
+    pdf.ln(5)
+    pdf.set_font('Arial', 'B', 14)
+    pdf.cell(0, 10, '4. Hallazgos de Auditoria (Incongruencias)', 0, 1)
+    pdf.set_font('Arial', '', 11)
+    pdf.multi_cell(0, 8, f"El algoritmo de auditoria inteligente detecto {stats_dict['total_incongruencias']} errores clinicos/logicos en las fechas o generos reportados. Estos deben ser revisados urgentemente en la plataforma SIVIGILA oficial.")
+
+    import tempfile
+    import os
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        temp_path = tmp.name
+    pdf.output(temp_path, "F")
+    with open(temp_path, "rb") as f:
+        pdf_bytes = f.read()
+    os.remove(temp_path)
+    return pdf_bytes
+
 def vista_sivigila():
-    st.markdown("### 📈 Tableros Epidemiológicos (SIVIGILA)")
-    st.info("Sube un archivo de rutina SIVIGILA (.csv o .xlsx) para generar análisis rápidos automáticos.")
-    archivo = st.file_uploader("Cargar Base de Datos SIVIGILA", type=["csv", "xlsx"])
-    if archivo:
+    st.markdown("### 📊 Tableros Epidemiológicos y SIVIGILA Pro")
+    st.info("Sube tu archivo de rutina SIVIGILA (.csv o .xlsx). Puedes usar la base cruda o la base decodificada.")
+    
+    archivo_global = st.file_uploader("📂 Cargar Base de Datos SIVIGILA Central", type=["csv", "xlsx"], key="global_siv")
+    
+    if archivo_global:
         try:
-            if archivo.name.endswith(".csv"):
-                df_siv = pd.read_csv(archivo, encoding='latin1', sep=';')
-                if len(df_siv.columns) < 5: df_siv = pd.read_csv(archivo, encoding='utf-8', sep=',')
+            with st.spinner("Leyendo base de datos..."):
+                if archivo_global.name.endswith(".csv"):
+                    df_siv = pd.read_csv(archivo_global, encoding='latin1', sep=';')
+                    if len(df_siv.columns) < 5: df_siv = pd.read_csv(archivo_global, encoding='utf-8', sep=',')
+                else:
+                    df_siv = pd.read_excel(archivo_global)
+            
+            st.success(f"✅ Archivo cargado correctamente: {len(df_siv)} registros analizados.")
+            
+            df_siv.columns = df_siv.columns.astype(str).str.strip()
+            cols_lower = df_siv.columns.str.lower()
+            
+            col_sem = [c for c in df_siv.columns if 'seman' in c.lower() or 'sem_' in c.lower()][0] if any('seman' in c.lower() or 'sem_' in c.lower() for c in df_siv.columns) else None
+            col_sex = [c for c in df_siv.columns if 'sex' in c.lower()][0] if any('sex' in c.lower() for c in df_siv.columns) else None
+            col_ed = [c for c in df_siv.columns if 'edad' in c.lower()][0] if any('edad' in c.lower() for c in df_siv.columns) else None
+            
+            col_mun = None
+            posibles_mun = [c for c in df_siv.columns if 'mun_' in c.lower() or 'municipio' in c.lower()]
+            if posibles_mun: col_mun = posibles_mun[0]
+            
+            col_upgd = None
+            if 'nom_upgd' in cols_lower: col_upgd = df_siv.columns[cols_lower == 'nom_upgd'][0]
+            elif 'cod_upgd' in cols_lower: col_upgd = df_siv.columns[cols_lower == 'cod_upgd'][0]
             else:
-                df_siv = pd.read_excel(archivo)
+                posibles_upgd = [c for c in df_siv.columns if 'upgd' in c.lower() and c.lower() not in ['ndep_upgd', 'nmun_upgd']]
+                if posibles_upgd: col_upgd = posibles_upgd[0]
             
-            st.success(f"Archivo cargado correctamente: {len(df_siv)} registros.")
-            with st.expander("👁️ Vista Previa de la Base de Datos"):
-                st.dataframe(df_siv.head(50))
+            col_evento = None
+            if any('evento' in col for col in cols_lower): col_evento = [c for c in df_siv.columns if 'evento' in c.lower()][0]
+            elif 'cod_eve' in cols_lower: col_evento = df_siv.columns[cols_lower == 'cod_eve'][0]
+
+
+            # --- INICIO KPIs Y MAQUINA DEL TIEMPO ---
+            if col_sem:
+                try:
+                    df_siv[col_sem] = pd.to_numeric(df_siv[col_sem], errors='coerce')
+                    semana_min = int(df_siv[col_sem].min(skipna=True))
+                    semana_max = int(df_siv[col_sem].max(skipna=True))
+                    
+                    if semana_min < semana_max:
+                        st.markdown("### ⏱️ Máquina del Tiempo Epidemiológica")
+                        semana_seleccionada = st.slider("Viajar en el tiempo hasta la Semana Epidemiológica:", min_value=semana_min, max_value=semana_max, value=semana_max)
+                    else:
+                        semana_seleccionada = semana_max
+                        st.info(f"📅 Única semana detectada: {semana_max}")
+                        
+                    # Filtrar la base global
+                    df_siv = df_siv[df_siv[col_sem] <= semana_seleccionada]
+                    
+                    # Calcular KPIs
+                    casos_totales = len(df_siv)
+                    casos_semana = len(df_siv[df_siv[col_sem] == semana_seleccionada])
+                    casos_semana_ant = len(df_siv[df_siv[col_sem] == semana_seleccionada - 1])
+                    variacion = 0
+                    if casos_semana_ant > 0:
+                        variacion = ((casos_semana - casos_semana_ant) / casos_semana_ant) * 100
+                        
+                    top_evento = "N/A"
+                    if col_evento and len(df_siv) > 0:
+                        top_evento = df_siv[col_evento].value_counts().index[0][:20] # Top 20 chars
+                        
+                    mortalidad = 0
+                    col_def_kpi = [col for col in df_siv.columns if "fec_def" in col.lower()]
+                    if col_def_kpi:
+                        # Contar los que no son nulos ni vacíos ni "NaT"
+                        mortalidad = df_siv[col_def_kpi[0]].replace(['', 'NaT', 'nan', 'NaN'], np.nan).notna().sum()
+                        
+                    st.markdown("---")
+                    k1, k2, k3, k4, k5 = st.columns(5)
+                    k1.metric("🏥 Casos Acumulados", f"{casos_totales:,}")
+                    k2.metric(f"📅 Cas. Sem {semana_seleccionada}", f"{casos_semana:,}")
+                    k3.metric("📈 Crecimiento", f"{variacion:+.1f}%", delta=f"{variacion:+.1f}%", delta_color="inverse")
+                    k4.metric("🚨 Evento Top", str(top_evento))
+                    k5.metric("☠️ Mortalidades", f"{mortalidad:,}")
+                    st.markdown("---")
+                except Exception as e:
+                    st.warning(f"No se pudo cargar el módulo de tiempo: {e}")
+            # --- FIN KPIs ---
+
+            t0, t1, t2, t3, t4, t5, t6, t7, t8 = st.tabs([
+                "📊 Dashboard BI Analítico",
+                "📈 Tablero Gerencial y Mapas", 
+                "🏥 Ranking Clínicas/UPGD", 
+                "🕵️‍♂️ Auditoría Médica",
+                "🔄 Decodificador SIVIGILA",
+                "📄 Generar Boletín PDF",
+                "🚨 Alertas de Brotes",
+                "🏥 Silencio UPGD",
+                "🏢 Auditoría EPS"
+            ])
             
-            col1, col2 = st.columns(2)
-            with col1:
-                if 'semana' in df_siv.columns.str.lower():
-                    col_sem = df_siv.columns[df_siv.columns.str.lower() == 'semana'][0]
-                    st.markdown("#### 📊 Tendencia por Semana Epidemiológica")
-                    conteo_sem = df_siv[col_sem].value_counts().sort_index()
-                    st.line_chart(conteo_sem)
+            with t0:
+                st.markdown("### 📊 Dashboard BI Analítico Integral")
+                st.info("Esta sección agrupa gráficamente todas las variables demográficas y clínicas de la base de datos hasta la semana seleccionada en la Máquina del Tiempo.")
+                
+                c_bi1, c_bi2 = st.columns(2)
+                
+                if col_evento:
+                    df_eve = df_siv[col_evento].value_counts().reset_index().head(10)
+                    df_eve.columns = ["Evento", "Casos"]
+                    fig_eve = px.bar(df_eve, x="Casos", y="Evento", orientation="h", title="Top 10 Eventos de Notificación", color="Casos", color_continuous_scale="Blues")
+                    fig_eve.update_layout(yaxis={'categoryorder':'total ascending'})
+                    with c_bi1: st.plotly_chart(fig_eve, use_container_width=True)
+                
+                if col_mun:
+                    df_mun = df_siv[col_mun].value_counts().reset_index().head(10)
+                    df_mun.columns = ["Municipio", "Casos"]
+                    fig_mun = px.bar(df_mun, x="Municipio", y="Casos", title="Top 10 Municipios", color="Casos", color_continuous_scale="Reds")
+                    with c_bi2: st.plotly_chart(fig_mun, use_container_width=True)
+                    
+                c_bi3, c_bi4, c_bi5 = st.columns(3)
+                if col_sex:
+                    fig_sex = px.pie(df_siv, names=col_sex, title="Distribución por Sexo", hole=0.4)
+                    with c_bi3: st.plotly_chart(fig_sex, use_container_width=True)
+                
+                # Check for EPS col
+                cols_lower_bi = df_siv.columns.str.lower()
+                col_eapb_bi = None
+                if 'eapb_' in cols_lower_bi: col_eapb_bi = df_siv.columns[cols_lower_bi == 'eapb_'][0]
+                elif 'cod_ase_' in cols_lower_bi: col_eapb_bi = df_siv.columns[cols_lower_bi == 'cod_ase_'][0]
+                elif 'aseguradora' in cols_lower_bi: col_eapb_bi = df_siv.columns[cols_lower_bi == 'aseguradora'][0]
+                
+                if col_eapb_bi:
+                    df_eps = df_siv[col_eapb_bi].value_counts().reset_index().head(7)
+                    df_eps.columns = ["EPS", "Casos"]
+                    fig_eps = px.pie(df_eps, names="EPS", values="Casos", title="Carga por EPS (Top 7)")
+                    with c_bi4: st.plotly_chart(fig_eps, use_container_width=True)
+                    
+                if col_ed:
+                    try:
+                        df_edad = df_siv.copy()
+                        df_edad[col_ed] = pd.to_numeric(df_edad[col_ed], errors='coerce')
+                        # Limpiar edades irreales
+                        df_edad = df_edad[(df_edad[col_ed] >= 0) & (df_edad[col_ed] <= 110)]
+                        
+                        # Crear rangos de edad epidemiológicos (Ciclo Vital)
+                        bins = [-1, 5, 11, 18, 28, 59, 120]
+                        labels = ['0 a 5 años (Primera Infancia)', '6 a 11 años (Infancia)', '12 a 18 años (Adolescencia)', '19 a 28 años (Juventud)', '29 a 59 años (Adultez)', '60+ años (Adulto Mayor)']
+                        df_edad['Ciclo_Vital'] = pd.cut(df_edad[col_ed], bins=bins, labels=labels)
+                        
+                        df_rangos = df_edad['Ciclo_Vital'].value_counts().reset_index()
+                        df_rangos.columns = ['Rango de Edad', 'Casos']
+                        df_rangos = df_rangos.sort_index() # Sort by the categorical order
+                        
+                        fig_ed = px.bar(df_rangos, x="Casos", y="Rango de Edad", orientation="h", title="Afectación por Ciclo de Vida", color="Casos", color_continuous_scale="Purples")
+                        with c_bi5: st.plotly_chart(fig_ed, use_container_width=True)
+                    except Exception as e:
+                        pass
+
+            
+            with t1:
+                st.markdown("#### 🗺️ Mapa Epidemiológico (Sucre)")
+                if col_mun:
+                    df_mapa = df_siv.copy()
+                    df_mapa["Mun_Normalizado"] = df_mapa[col_mun].astype(str).str.upper().str.strip()
+                    import unicodedata
+                    df_mapa["Mun_Normalizado"] = df_mapa["Mun_Normalizado"].apply(
+                        lambda x: ''.join(c for c in unicodedata.normalize('NFD', str(x)) if unicodedata.category(c) != 'Mn')
+                    )
+                    
+                    df_mapa["Lat"] = df_mapa["Mun_Normalizado"].map(lambda x: SUCRE_COORDENADAS.get(x, {}).get("lat", None))
+                    df_mapa["Lon"] = df_mapa["Mun_Normalizado"].map(lambda x: SUCRE_COORDENADAS.get(x, {}).get("lon", None))
+                    
+                    df_mapa_val = df_mapa.dropna(subset=["Lat", "Lon"])
+                    if not df_mapa_val.empty:
+                        conteo_mapa = df_mapa_val.groupby(["Mun_Normalizado", "Lat", "Lon"]).size().reset_index(name="Casos")
+                        fig_map = px.scatter_mapbox(
+                            conteo_mapa, lat="Lat", lon="Lon", size="Casos", color="Casos",
+                            hover_name="Mun_Normalizado", zoom=7, mapbox_style="carto-positron",
+                            color_continuous_scale="Reds", size_max=40, title="Concentración de Casos por Municipio"
+                        )
+                        st.plotly_chart(fig_map, use_container_width=True)
+                    else:
+                        st.info("No se pudieron emparejar los municipios con el mapa.")
                 else:
-                    st.warning("No se detectó columna 'semana' para gráfico temporal.")
-            with col2:
-                if 'sexo' in df_siv.columns.str.lower() and 'edad' in df_siv.columns.str.lower():
-                    col_sex = df_siv.columns[df_siv.columns.str.lower() == 'sexo'][0]
-                    col_ed = df_siv.columns[df_siv.columns.str.lower() == 'edad'][0]
-                    st.markdown("#### 👥 Distribución por Sexo")
-                    st.bar_chart(df_siv[col_sex].value_counts())
+                    st.info("No se detectó columna de municipio para el mapa territorial.")
+                    
+                st.markdown("#### 📈 Análisis de Tendencia (Semanas y Acumulado)")
+                if col_sem:
+                    c_t1, c_t2 = st.columns(2)
+                    try:
+                        if col_evento:
+                            # 1. Grafica por semanas (Area)
+                            df_tendencia = df_siv.groupby([col_sem, col_evento]).size().reset_index(name="Casos")
+                            top_5 = df_siv[col_evento].value_counts().head(5).index
+                            df_tendencia_top = df_tendencia[df_tendencia[col_evento].isin(top_5)]
+                            df_tendencia_top = df_tendencia_top.sort_values(by=[col_sem, col_evento])
+                            fig_line = px.area(df_tendencia_top, x=col_sem, y="Casos", color=col_evento, title="Evolución Semanal", markers=True)
+                            with c_t1: st.plotly_chart(fig_line, use_container_width=True)
+                            
+                            # 2. Grafica Acumulada
+                            df_acum = df_siv.groupby([col_sem]).size().reset_index(name="Casos_Semana").sort_values(by=col_sem)
+                            df_acum["Acumulado"] = df_acum["Casos_Semana"].cumsum()
+                            fig_acum = px.line(df_acum, x=col_sem, y="Acumulado", title="Crecimiento Acumulado del Año", markers=True)
+                            fig_acum.update_traces(line_color="red", line_width=4, fill="tozeroy")
+                            with c_t2: st.plotly_chart(fig_acum, use_container_width=True)
+                        else:
+                            df_tendencia = df_siv.groupby([col_sem]).size().reset_index(name="Casos").sort_values(by=col_sem)
+                            fig_line = px.bar(df_tendencia, x=col_sem, y="Casos", title="Casos por Semana", color="Casos", color_continuous_scale="Reds")
+                            with c_t1: st.plotly_chart(fig_line, use_container_width=True)
+                            
+                            df_tendencia["Acumulado"] = df_tendencia["Casos"].cumsum()
+                            fig_acum = px.line(df_tendencia, x=col_sem, y="Acumulado", title="Crecimiento Acumulado", markers=True)
+                            with c_t2: st.plotly_chart(fig_acum, use_container_width=True)
+                    except Exception as e:
+                        st.warning(f"No se pudo graficar la curva temporal: {e}")
+                
+                st.markdown("---")
+                c1_a, c1_b = st.columns(2)
+                with c1_a:
+                    st.markdown("#### 🚨 Canal Endémico (Alarma Temprana)")
+                    if col_sem:
+                        conteo_sem = df_siv[col_sem].value_counts().sort_index().reset_index()
+                        conteo_sem.columns = ["Semana", "Casos"]
+                        
+                        media_casos = conteo_sem["Casos"].mean()
+                        std_casos = conteo_sem["Casos"].std()
+                        umbral = media_casos + (1.2 * std_casos) if pd.notnull(std_casos) else media_casos
+                        conteo_sem["Umbral de Alerta"] = umbral
+                        
+                        fig_canal = px.line(conteo_sem, x="Semana", y=["Casos", "Umbral de Alerta"], 
+                                          color_discrete_sequence=["#2ecc71", "#e74c3c"],
+                                          title="Evolución Semanal vs Límite de Alarma")
+                        
+                        brotes = conteo_sem[conteo_sem["Casos"] > conteo_sem["Umbral de Alerta"]]
+                        if not brotes.empty:
+                            fig_canal.add_scatter(x=brotes["Semana"], y=brotes["Casos"], mode="markers", 
+                                                marker=dict(color="red", size=10), name="¡BROTE DETECTADO!")
+                            st.error(f"⚠️ ¡Alerta! Se detectó comportamiento de brote epidémico en {len(brotes)} semanas.")
+                        
+                        st.plotly_chart(fig_canal, use_container_width=True)
+                    else:
+                        st.warning("No se detectó columna 'semana'.")
+                
+                with c1_b:
+                    st.markdown("#### 👥 Pirámide y Demografía")
+                    if col_sex and col_ed:
+                        fig_sex = px.pie(df_siv, names=col_sex, title="Distribución por Sexo", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
+                        st.plotly_chart(fig_sex, use_container_width=True)
+                    else:
+                        st.warning("No se detectaron columnas de sexo/edad.")
+
+            with t2:
+                st.markdown("#### 🏥 Semáforo y Ranking de Hospitales/IPS")
+                st.info("Evalúa el rendimiento de notificación de cada institución.")
+                if col_upgd:
+                    if "Dias de notificacion" not in df_siv.columns:
+                        col_not = [col for col in df_siv.columns if "fec_not_" in col.lower()]
+                        col_con = [col for col in df_siv.columns if "fec_con_" in col.lower()]
+                        if col_not and col_con:
+                            try:
+                                # import numpy as np removed to prevent shadowing
+                                df_siv["Dias de notificacion"] = (pd.to_datetime(df_siv[col_not[0]], errors='coerce', dayfirst=True) - pd.to_datetime(df_siv[col_con[0]], errors='coerce', dayfirst=True)).dt.days
+                                df_siv.loc[(df_siv["Dias de notificacion"] < 0) | (df_siv["Dias de notificacion"] > 365), "Dias de notificacion"] = np.nan
+                            except: pass
+                        cols_lower = df_siv.columns.str.lower()
+                    if "Dias de notificacion" in df_siv.columns:
+                        agrup_upgd = df_siv.groupby(col_upgd).agg(
+                            Total_Casos=(col_upgd, 'count'),
+                            Mora_Promedio=("Dias de notificacion", 'mean')
+                        ).reset_index()
+                    else:
+                        agrup_upgd = df_siv.groupby(col_upgd).agg(
+                            Total_Casos=(col_upgd, 'count')
+                        ).reset_index()
+                        agrup_upgd["Mora_Promedio"] = "N/A"
+                    
+                    agrup_upgd = agrup_upgd.sort_values(by="Total_Casos", ascending=False)
+                    st.dataframe(agrup_upgd, use_container_width=True)
+                    
+                    if "Dias de notificacion" in df_siv.columns:
+                        st.markdown("##### 🚨 Las 10 IPS más demoradas (Peor Mora Promedio)")
+                        peores = agrup_upgd.sort_values(by="Mora_Promedio", ascending=False).head(10)
+                        fig_peores = px.bar(peores, x=col_upgd, y="Mora_Promedio", text_auto='.1f', color="Mora_Promedio", color_continuous_scale="Reds")
+                        st.plotly_chart(fig_peores, use_container_width=True)
                 else:
-                    st.warning("No se detectaron columnas 'sexo' y 'edad' para distribución demográfica.")
+                    st.warning("La base de datos no tiene una columna identificable de IPS o UPGD.")
+
+            with t3:
+                st.markdown("#### 🕵️‍♂️ Escáner de Errores Médicos y Lógicos")
+                st.info("Revisando incongruencias graves en fechas, sexos y edades reportadas al SIVIGILA.")
+                incongruencias = []
+                
+                if 'fec_def_' in cols_lower and 'fec_con_' in cols_lower:
+                    c_def = df_siv.columns[cols_lower == 'fec_def_'][0]
+                    c_con = df_siv.columns[cols_lower == 'fec_con_'][0]
+                    df_fechas = df_siv.copy()
+                    df_fechas[c_def] = pd.to_datetime(df_fechas[c_def], errors='coerce', dayfirst=True)
+                    df_fechas[c_con] = pd.to_datetime(df_fechas[c_con], errors='coerce', dayfirst=True)
+                    err_fechas = df_fechas[df_fechas[c_def] < df_fechas[c_con]]
+                    if not err_fechas.empty:
+                        for idx, row in err_fechas.iterrows():
+                            incongruencias.append({"Fila": idx+2, "Tipo de Error": "Fecha de Defunción MENOR a Fecha de Consulta", "Detalle": f"Consulta: {row[c_con]} | Defunción: {row[c_def]}"})
+
+                if col_sex and col_evento:
+                    eventos_femeninos = ["MATERNA", "EMBARAZADA", "MAMA", "CUELLO UTERINO", "GESTANTE"]
+                    mask_femeninos = df_siv[col_evento].astype(str).str.contains('|'.join(eventos_femeninos), case=False, na=False)
+                    mask_hombres = df_siv[col_sex].astype(str).str.upper().isin(["M", "MASCULINO", "1"])
+                    err_sexo = df_siv[mask_femeninos & mask_hombres]
+                    if not err_sexo.empty:
+                        for idx, row in err_sexo.iterrows():
+                            incongruencias.append({"Fila": idx+2, "Tipo de Error": "Enfermedad Materna/Femenina en sexo Masculino", "Detalle": f"Evento: {row[col_evento]} | Sexo: M"})
+                
+                if col_ed:
+                    err_edad = df_siv[(pd.to_numeric(df_siv[col_ed], errors='coerce') < 0) | (pd.to_numeric(df_siv[col_ed], errors='coerce') > 115)]
+                    if not err_edad.empty:
+                        for idx, row in err_edad.iterrows():
+                            incongruencias.append({"Fila": idx+2, "Tipo de Error": "Edad fuera de rangos biológicos (Absurda)", "Detalle": f"Edad reportada: {row[col_ed]}"})
+
+                df_incongruencias = pd.DataFrame(incongruencias)
+                st.metric("Total Incongruencias Graves Detectadas", len(df_incongruencias))
+                if not df_incongruencias.empty:
+                    st.error("Se encontraron los siguientes errores. Es necesario oficiar a las UPGD para ajustar en SIVIGILA Nacional.")
+                    st.dataframe(df_incongruencias, use_container_width=True)
+                    st.download_button("📥 Exportar Errores", df_incongruencias.to_csv(index=False).encode("utf-8-sig"), "Errores.csv", "text/csv")
+                    st.session_state["_incongruencias_count"] = len(df_incongruencias)
+                else:
+                    st.success("¡Excelente! El escáner no encontró ninguna incongruencia grave de fechas o cruces biológicos.")
+                    st.session_state["_incongruencias_count"] = 0
+
+            with t4:
+                st.markdown("#### 🔄 Decodificador Automático SIVIGILA")
+                st.write("Si subiste la base de datos **cruda**, sube el diccionario aquí para decodificarla. Si ya la subiste decodificada, ignora esta pestaña.")
+                archivo_dicc = st.file_uploader("Sube el Diccionario (sivigila_codificacion...)", type=["xlsx"], key="dicc_siv")
+                if archivo_dicc:
+                    if st.button("🚀 Ejecutar Decodificación y Resumen", type="primary", use_container_width=True):
+                        with st.spinner("Procesando y cruzando bases de datos..."):
+                            try:
+                                datos = df_siv.copy()
+                                sivigila = pd.read_excel(archivo_dicc, sheet_name=None)
+                                if "CIE10" not in sivigila or "EVENTOS" not in sivigila:
+                                    st.error("❌ El archivo de Diccionario debe contener las pestañas 'CIE10' y 'EVENTOS'.")
+                                else:
+                                    lista_cie10 = sivigila["CIE10"]
+                                    lista_eventos = sivigila["EVENTOS"]
+                                    
+                                    if "cbmte_" in datos.columns:
+                                        datos["CAUSA BASICA DE MUERTE"] = datos["cbmte_"].map(dict(zip(lista_cie10["codigo_cie10"], lista_cie10["CIE10"])))
+                                        cbmte_index = datos.columns.get_loc("cbmte_") + 1
+                                        datos.insert(loc=cbmte_index, column="CAUSA BASICA DE MUERTE", value=datos.pop("CAUSA BASICA DE MUERTE"))
+                                    
+                                    if "cod_eve" in datos.columns:
+                                        datos["TIPO DE NOTIFICACION"] = datos["cod_eve"].map(dict(zip(lista_eventos["cod_eve"], lista_eventos["notificacion"])))
+                                        datos["DISPONIBILIDAD_CAPTURA_EN_LINEA"] = datos["cod_eve"].map(dict(zip(lista_eventos["cod_eve"], lista_eventos["disponibilidad_captura_en_linea"])))
+                                        codeve_index = datos.columns.get_loc("cod_eve") + 1
+                                        datos.insert(loc=codeve_index, column="TIPO DE NOTIFICACION", value=datos.pop("TIPO DE NOTIFICACION"))
+                                        datos.insert(loc=codeve_index + 1, column="DISPONIBILIDAD_CAPTURA_EN_LINEA", value=datos.pop("DISPONIBILIDAD_CAPTURA_EN_LINEA"))
+                                        
+                                        if "evento" in lista_eventos.columns:
+                                            datos["NOMBRE_EVENTO"] = datos["cod_eve"].map(dict(zip(lista_eventos["cod_eve"], lista_eventos["evento"])))
+                                    
+                                    if "fec_not" in datos.columns and "fec_con_" in datos.columns:
+                                        datos["fecha_consulta"] = datos["fec_con_"]
+                                        datos["fec_not_dt"] = pd.to_datetime(datos["fec_not"], dayfirst=True, errors='coerce')
+                                        datos["fec_con_dt"] = pd.to_datetime(datos["fecha_consulta"], dayfirst=True, errors='coerce')
+                                        datos["Dias de notificacion"] = (datos["fec_not_dt"] - datos["fec_con_dt"]).dt.days
+                                        datos["fec_not"] = datos["fec_not_dt"].dt.strftime("%d/%m/%Y")
+                                        datos["fecha_consulta"] = datos["fec_con_dt"].dt.strftime("%d/%m/%Y")
+                                        datos.drop(columns=["fec_not_dt", "fec_con_dt"], inplace=True)
+                                        fecnot_index = datos.columns.get_loc("fec_not") + 1
+                                        datos.insert(loc=fecnot_index, column="fecha_consulta", value=datos.pop("fecha_consulta"))
+                                        datos.insert(loc=fecnot_index + 1, column="Dias de notificacion", value=datos.pop("Dias de notificacion"))
+                                    
+                                    output = io.BytesIO()
+                                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                                        datos.to_excel(writer, index=False, sheet_name='SIVIGILA_Decodificado')
+                                    val_excel = output.getvalue()
+                                    
+                                    st.success("✅ ¡Procesamiento completado con éxito!")
+                                    st.download_button("📥 Descargar Reporte Decodificado", data=val_excel, file_name="Reporte_SIVIGILA_Decodificado.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
+                            except Exception as e:
+                                st.error(f"Error decodificando: {str(e)}")
+
+            with t5:
+                st.markdown("#### 📄 Generador Automático de Boletín PDF")
+                st.info("Presiona el botón para generar un documento PDF gerencial con el resumen de la base de datos actual.")
+                
+                if st.button("🖨️ Generar y Descargar Boletín PDF", type="primary"):
+                    try:
+                        mora_prom = df_siv["Dias de notificacion"].mean() if "Dias de notificacion" in df_siv.columns else 0
+                        mora_mx = df_siv["Dias de notificacion"].max() if "Dias de notificacion" in df_siv.columns else 0
+                        peores = []
+                        if "Dias de notificacion" in df_siv.columns and col_upgd:
+                            ag_pdf = df_siv.groupby(col_upgd)["Dias de notificacion"].mean().sort_values(ascending=False).head(3)
+                            peores = ag_pdf.index.tolist()
+                            
+                        stats_dict = {
+                            "total_casos": len(df_siv),
+                            "mora_promedio": f"{mora_prom:.1f}",
+                            "mora_max": f"{mora_mx:.0f}",
+                            "peores_upgd": peores if peores else ["No se detectó UPGD / Mora"],
+                            "total_incongruencias": st.session_state.get("_incongruencias_count", 0)
+                        }
+                        
+                        pdf_bytes = generar_pdf_boletin(df_siv, stats_dict)
+                        st.success("✅ Boletín generado con éxito.")
+                        st.download_button("📥 Descargar Boletín PDF", data=pdf_bytes, file_name=f"Boletin_SIVIGILA_{datetime.today().strftime('%Y%m%d')}.pdf", mime="application/pdf", type="primary")
+                    except Exception as e:
+                        st.error(f"Error al generar PDF: {e}")
+
+            with t6:
+                st.markdown("#### 🚨 Alerta de Brotes (Inteligencia Epidemiológica)")
+                st.info("El sistema evalúa el comportamiento histórico de cada evento por municipio.")
+                
+                if col_mun and col_sem and col_evento:
+                    df_brotes = df_siv.groupby([col_mun, col_evento, col_sem]).size().reset_index(name='Casos')
+                    df_brotes = df_brotes.sort_values(by=col_sem)
+                    semana_actual = df_siv[col_sem].max()
+                    alertas = []
+                    for (mun, eve), grupo in df_brotes.groupby([col_mun, col_evento]):
+                        historico = grupo[grupo[col_sem] < semana_actual]['Casos']
+                        actual = grupo[grupo[col_sem] == semana_actual]['Casos']
+                        if not historico.empty and not actual.empty:
+                            media_hist = historico.mean()
+                            std_hist = historico.std()
+                            if pd.isna(std_hist): std_hist = 0
+                            casos_actuales = actual.values[0]
+                            umbral = media_hist + (1.5 * std_hist)
+                            if casos_actuales > umbral and casos_actuales >= 3:
+                                alertas.append({
+                                    "Municipio": mun,
+                                    "Evento": eve,
+                                    "Casos Sem Actual": casos_actuales,
+                                    "Promedio Histórico": round(media_hist, 1),
+                                    "Crecimiento %": f"{round((casos_actuales - media_hist) / (media_hist if media_hist > 0 else 1) * 100, 1)}%"
+                                })
+                    if alertas:
+                        st.error(f"⚠️ ¡Atención! Se han detectado **{len(alertas)}** posibles brotes anómalos en la semana {semana_actual}.")
+                        df_al = pd.DataFrame(alertas).sort_values(by="Casos Sem Actual", ascending=False)
+                        st.dataframe(df_al, use_container_width=True)
+                        st.download_button("📥 Exportar Brotes", df_al.to_csv(index=False).encode("utf-8-sig"), "Brotes.csv", "text/csv")
+                    else:
+                        st.success(f"✅ Todo en orden. No se detectaron disparos inusuales de casos en la semana {semana_actual}.")
+                else:
+                    st.warning("Faltan variables clave (municipio, evento, semana) para calcular brotes.")
+                    
+            with t7:
+                st.markdown("#### 🏥 Radar de Silencio Epidemiológico (UPGD)")
+                st.info("Ley INS: Ningún hospital o UPGD puede pasar 1 semana completa sin notificar. Alerta ROJA a partir de 1 semana de silencio.")
+                col_upgd = None
+                if 'ndep_upgd' in cols_lower and 'cod_pre' in cols_lower and 'cod_sub' in cols_lower:
+                    df_siv['UPGD_Concat'] = df_siv['ndep_upgd'].astype(str).str.zfill(2) + df_siv['nmun_upgd'].astype(str).str.zfill(3) + df_siv['cod_pre'].astype(str) + df_siv['cod_sub'].astype(str).str.zfill(2)
+                    col_upgd = 'UPGD_Concat'
+                    cols_lower = df_siv.columns.str.lower()
+                elif 'cod_upgd' in cols_lower: col_upgd = df_siv.columns[cols_lower == 'cod_upgd'][0]
+                elif 'upgd' in cols_lower: col_upgd = df_siv.columns[cols_lower == 'upgd'][0]
+                
+                if col_upgd and col_sem:
+                    semana_actual = df_siv[col_sem].max()
+                    ultimas_semanas = df_siv.groupby(col_upgd)[col_sem].max().reset_index()
+                    ultimas_semanas.columns = ['UPGD', 'Última Semana Reportada']
+                    ultimas_semanas['Semanas de Silencio'] = semana_actual - ultimas_semanas['Última Semana Reportada']
+                    
+                    def clasificar_silencio(semanas):
+                        if semanas == 0: return "🟢 AL DÍA"
+                        elif semanas == 1: return "🔴 ALERTA ROJA CRÍTICA (Silencio de 1 Sem)"
+                        elif semanas <= 3: return "🚨 ROJA PROLONGADA (Requiere BAI)"
+                        else: return "🔥 ROJA EXTREMA (Auditoría Integral >4 Sem)"
+                        
+                    ultimas_semanas['Alerta Normativa INS'] = ultimas_semanas['Semanas de Silencio'].apply(clasificar_silencio)
+                    silenciosos = ultimas_semanas[ultimas_semanas['Semanas de Silencio'] > 0].sort_values(by='Semanas de Silencio', ascending=False)
+                    
+                    m_a, m_b = st.columns(2)
+                    m_a.metric("UPGDs Al Día (Semana Actual)", len(ultimas_semanas[ultimas_semanas['Semanas de Silencio'] == 0]))
+                    m_b.metric("UPGDs en Silencio (Incumplimiento)", len(silenciosos))
+                    if not silenciosos.empty:
+                        st.dataframe(silenciosos.style.map(lambda x: 'color: red; font-weight: bold;' if 'ROJA' in str(x) or '🔥' in str(x) else '', subset=['Alerta Normativa INS']), use_container_width=True)
+                        st.download_button('📥 Exportar Silencios', silenciosos.to_csv(index=False).encode('utf-8-sig'), 'Silencios.csv', 'text/csv')
+                    else:
+                        st.success("🏆 ¡Excelente trabajo departamental! Todas las UPGD han notificado en la semana actual.")
+                else:
+                    st.warning("No se encontró la columna de código de UPGD en la base de datos.")
+
+            with t8:
+                st.markdown("#### 🏢 Fiscalización y Auditoría EPS (EAPB)")
+                st.info("Rendimiento clínico y oportunidad de atención por Aseguradora.")
+                cols_lower = df_siv.columns.str.lower()
+                col_eapb = None
+                if 'eapb_' in cols_lower: col_eapb = df_siv.columns[cols_lower == 'eapb_'][0]
+                elif 'cod_ase_' in cols_lower: col_eapb = df_siv.columns[cols_lower == 'cod_ase_'][0]
+                elif 'aseguradora' in cols_lower: col_eapb = df_siv.columns[cols_lower == 'aseguradora'][0]
+                
+                if col_eapb:
+                    df_eps = df_siv.copy()
+                    col_con = df_eps.columns[cols_lower == "fec_con_"][0] if "fec_con_" in cols_lower else None
+                    col_sin = df_eps.columns[cols_lower == "ini_sin_"][0] if "ini_sin_" in cols_lower else None
+                    col_def = df_eps.columns[cols_lower == "fec_def_"][0] if "fec_def_" in cols_lower else None
+                    
+                    if col_con and col_sin:
+                        df_eps[col_con] = pd.to_datetime(df_eps[col_con], errors='coerce', dayfirst=True)
+                        df_eps[col_sin] = pd.to_datetime(df_eps[col_sin], errors='coerce', dayfirst=True)
+                        df_eps['Dias_Retraso_Atencion'] = (df_eps[col_con] - df_eps[col_sin]).dt.days
+                        df_eps.loc[(df_eps['Dias_Retraso_Atencion'] < 0) | (df_eps['Dias_Retraso_Atencion'] > 365), 'Dias_Retraso_Atencion'] = np.nan
+                    
+                    df_eps['Muerte'] = 0
+                    if col_def:
+                        df_eps.loc[df_eps[col_def].notna() & (df_eps[col_def].astype(str).str.strip() != ""), 'Muerte'] = 1
+                        
+                    resumen_eps = df_eps.groupby(col_eapb).agg(
+                        Casos_Totales=(col_eapb, 'count'),
+                        Mortalidades=('Muerte', 'sum'),
+                        Promedio_Dias_Retraso=('Dias_Retraso_Atencion', 'mean') if col_con and col_sin else (col_eapb, lambda x: np.nan)
+                    ).reset_index()
+                    resumen_eps['Tasa Mortalidad (%)'] = round((resumen_eps['Mortalidades'] / resumen_eps['Casos_Totales']) * 100, 2)
+                    resumen_eps['Promedio_Dias_Retraso'] = round(resumen_eps['Promedio_Dias_Retraso'], 1)
+                    resumen_eps = resumen_eps[resumen_eps['Casos_Totales'] >= 5]
+                    
+                    e1, e2 = st.columns(2)
+                    with e1:
+                        st.write("**Peores EPS por Oportunidad de Atención (Días en ir al médico):**")
+                        p1 = resumen_eps.sort_values(by='Promedio_Dias_Retraso', ascending=False).head(10)
+                        st.dataframe(p1[[col_eapb, 'Promedio_Dias_Retraso', 'Casos_Totales']], use_container_width=True)
+                        st.download_button('📥 Exportar EPS Lentas', p1[[col_eapb, 'Promedio_Dias_Retraso', 'Casos_Totales']].to_csv(index=False).encode('utf-8-sig'), 'EPS_Lentas.csv', 'text/csv')
+                    with e2:
+                        st.write("**Top Mortalidad por EPS (% de fallecidos vs atendidos):**")
+                        p2 = resumen_eps.sort_values(by='Tasa Mortalidad (%)', ascending=False).head(10)
+                        st.dataframe(p2[[col_eapb, 'Mortalidades', 'Tasa Mortalidad (%)']], use_container_width=True)
+                        st.download_button('📥 Exportar Mortalidad EPS', p2[[col_eapb, 'Mortalidades', 'Tasa Mortalidad (%)']].to_csv(index=False).encode('utf-8-sig'), 'EPS_Mortalidad.csv', 'text/csv')
+                else:
+                    st.warning("No se detectó la columna EAPB (Aseguradora).")
+                    
+
+
         except Exception as e:
-            st.error(f"Error procesando el archivo: {e}")
+            st.error(f"Error procesando el archivo principal: {e}")
+
+
+class PDFMortalidad(FPDF):
+    def header(self):
+        self.set_font('Arial', 'B', 14)
+        self.set_fill_color(220, 53, 69)  # Rojo oscuro
+        self.set_text_color(255, 255, 255)
+        self.cell(0, 12, 'Ficha Resumen de Unidad de Analisis - Mortalidad VSP', 0, 1, 'C', 1)
+        self.ln(5)
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.set_text_color(128, 128, 128)
+        self.cell(0, 10, f'Generado automaticamente - Sistema VSP - Pagina {self.page_no()}', 0, 0, 'C')
+
+def vista_sala_mortalidades():
+    st.markdown("<h2 class='main-title'>🪦 Sala de Análisis de Mortalidades</h2>", unsafe_allow_html=True)
+    st.info("Módulo especializado para la trazabilidad y control normativo (INS) de muertes de interés en Salud Pública.")
+    
+    archivo_mort = st.file_uploader("📂 Cargar Base SIVIGILA para analizar Mortalidades", type=["csv", "xlsx"], key="mort_siv")
+    if archivo_mort:
+        try:
+            with st.spinner("Escaneando defunciones..."):
+                if archivo_mort.name.endswith(".csv"):
+                    df = pd.read_csv(archivo_mort, encoding='latin1', sep=';')
+                    if len(df.columns) < 5: df = pd.read_csv(archivo_mort, encoding='utf-8', sep=',')
+                else:
+                    df = pd.read_excel(archivo_mort)
+            
+            df.columns = df.columns.astype(str).str.strip()
+            cols_lower = df.columns.str.lower()
+            
+            if "fec_def_" not in cols_lower:
+                st.error("❌ La base de datos no contiene la variable 'fec_def_' (Fecha de defunción).")
+                return
+            
+            col_def = df.columns[cols_lower == "fec_def_"][0]
+            col_con = df.columns[cols_lower == "fec_con_"][0] if "fec_con_" in cols_lower else None
+            
+            df_mort = df[df[col_def].notna() & (df[col_def].astype(str).str.strip() != "")].copy()
+            
+            if df_mort.empty:
+                st.success("¡Excelente noticia! No se detectaron defunciones en la base de datos suministrada.")
+                return
+            
+            # Limpieza y parseo de fechas
+            df_mort["fec_def_dt"] = pd.to_datetime(df_mort[col_def], errors='coerce', dayfirst=True)
+            df_mort = df_mort.dropna(subset=["fec_def_dt"])
+            
+            hoy = datetime.today()
+            df_mort["Dias_Transcurridos"] = (hoy - df_mort["fec_def_dt"]).dt.days
+            
+            # Algoritmo INS: 35 días para Unidad de Análisis
+            def calcular_semaforo(dias):
+                if pd.isna(dias): return "⚪ SIN FECHA"
+                if dias <= 15: return "🟢 A TIEMPO (0-15 d)"
+                elif dias <= 35: return "🟡 EN RIESGO (16-35 d)"
+                else: return "🔴 VENCIDO (>35 d)"
+            
+            df_mort["Semaforo_UA"] = df_mort["Dias_Transcurridos"].apply(calcular_semaforo)
+            
+            t1, t2, t3 = st.tabs(["📊 Panorama de Mortalidad", "⏰ Cronómetro de Comités (INS)", "📄 Generador de Pre-Actas"])
+            
+            with t1:
+                st.markdown("#### Radiografía de las Defunciones")
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Total Fallecidos", len(df_mort))
+                m2.metric("Vencidos (Sin comité o impunes)", len(df_mort[df_mort["Semaforo_UA"].str.contains("🔴")]))
+                m3.metric("Muertes Recientes (Verdes)", len(df_mort[df_mort["Semaforo_UA"].str.contains("🟢")]))
+                
+                c_a, c_b = st.columns(2)
+                col_eve = df.columns[cols_lower == "nombre_evento"][0] if "nombre_evento" in cols_lower else (df.columns[cols_lower == "evento"][0] if "evento" in cols_lower else None)
+                if col_eve:
+                    with c_a:
+                        fig_eve = px.pie(df_mort, names=col_eve, title="Causas de Mortalidad (Eventos)", hole=0.3)
+                        st.plotly_chart(fig_eve, use_container_width=True)
+                
+                col_mun = [c for c in df_mort.columns if 'mun_' in c.lower() or 'municipio' in c.lower()]
+                if col_mun:
+                    with c_b:
+                        conteo_mun = df_mort[col_mun[0]].value_counts().reset_index()
+                        conteo_mun.columns = ["Municipio", "Muertes"]
+                        fig_mun = px.bar(conteo_mun, x="Municipio", y="Muertes", title="Muertes por Municipio", text="Muertes", color="Muertes", color_continuous_scale="Reds")
+                        st.plotly_chart(fig_mun, use_container_width=True)
+
+            with t2:
+                st.markdown("#### Control de Tiempos Exactos (INS)")
+                st.info("Ley INS: Máximo 35 días calendario para cargue de UACE en el aplicativo.")
+                
+                cols_mostrar = [col_def, "Dias_Transcurridos", "Semaforo_UA"]
+                if col_eve: cols_mostrar.insert(0, col_eve)
+                if col_mun: cols_mostrar.insert(0, col_mun[0])
+                if "edad_" in cols_lower: cols_mostrar.append(df.columns[cols_lower == "edad_"][0])
+                elif "edad" in cols_lower: cols_mostrar.append(df.columns[cols_lower == "edad"][0])
+                
+                st.dataframe(df_mort[cols_mostrar].sort_values(by="Dias_Transcurridos", ascending=False), use_container_width=True)
+            
+            with t3:
+                st.markdown("#### Generador de Pre-Actas para Comité")
+                st.write("Selecciona una de las defunciones de la base de datos para generar un PDF pre-llenado listo para llevar al comité de la Unidad de Análisis.")
+                
+                opciones = ["Seleccione un fallecido..."]
+                for idx, row in df_mort.iterrows():
+                    lbl_mun = row[col_mun[0]] if col_mun else "Desc"
+                    lbl_eve = row[col_eve] if col_eve else "Evento Desc"
+                    lbl_fec = row[col_def]
+                    opciones.append(f"Fila {idx+2}: {lbl_mun} - {lbl_eve} - {lbl_fec}")
+                
+                sel_fallecido = st.selectbox("Seleccionar Fallecido:", opciones)
+                if sel_fallecido != "Seleccione un fallecido...":
+                    idx_real = int(sel_fallecido.split(":")[0].replace("Fila ", "")) - 2
+                    datos_fall = df_mort.loc[idx_real]
+                    
+                    if st.button("🖨️ Generar PDF de Unidad de Análisis", type="primary"):
+                        pdf = PDFMortalidad()
+                        pdf.add_page()
+                        pdf.set_font('Arial', 'B', 12)
+                        
+                        pdf.cell(0, 10, "INFORMACION BAsICA DEL FALLECIDO", 0, 1)
+                        pdf.set_font('Arial', '', 11)
+                        
+                        for k, v in datos_fall.items():
+                            if k.lower() not in ["fec_def_dt", "dias_transcurridos", "semaforo_ua"] and pd.notna(v):
+                                val_str = str(v).encode('latin-1', 'replace').decode('latin-1')
+                                key_str = str(k).encode('latin-1', 'replace').decode('latin-1')
+                                pdf.cell(0, 8, f"{key_str}: {val_str}", 0, 1)
+                        
+                        pdf.ln(5)
+                        pdf.set_font('Arial', 'B', 12)
+                        pdf.cell(0, 10, "ESTADO NORMATIVO (Semaforo INS)", 0, 1)
+                        pdf.set_font('Arial', '', 11)
+                        pdf.cell(0, 8, f"Dias desde defuncion: {datos_fall['Dias_Transcurridos']} dias.", 0, 1)
+                        estado_ins_str = str(datos_fall['Semaforo_UA']).encode('latin-1', 'replace').decode('latin-1')
+                        pdf.cell(0, 8, f"Estado INS: {estado_ins_str}", 0, 1)
+                        
+                        pdf.ln(10)
+                        pdf.set_font('Arial', 'B', 12)
+                        pdf.cell(0, 10, "CONCLUSIONES DEL COMITE (UACE):", 0, 1)
+                        pdf.set_font('Arial', '', 11)
+                        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+                        pdf.ln(10)
+                        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+                        pdf.ln(10)
+                        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+                        
+                        import tempfile
+                        import os
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                            temp_path = tmp.name
+                        pdf.output(temp_path, "F")
+                        with open(temp_path, "rb") as f:
+                            pdf_bytes = f.read()
+                        os.remove(temp_path)
+                        
+                        st.download_button("📥 Descargar Pre-Acta PDF", data=pdf_bytes, file_name=f"UA_Mortalidad_{datetime.today().strftime('%Y%m%d')}.pdf", mime="application/pdf", type="primary")
+
+        except Exception as e:
+            st.error(f"Error procesando módulo de mortalidades: {str(e)}")
 
 def vista_calidad_dato():
     st.markdown("### 🛡️ Módulo de Calidad del Dato")
@@ -2301,7 +3066,7 @@ def vista_tablero_problemas():
                 else:
                     nuevo_p = pd.DataFrame([{
                         "Fecha_Reporte": datetime.today().strftime("%Y-%m-%d"), "Municipio": p_mun,
-                        "Categoria": p_cat, "Descripcion": p_desc, "Responsable": p_resp,
+                        "Categoría": p_cat, "Descripción": p_desc, "Responsable": p_resp,
                         "Estado": "🔴 ABIERTO", "Respuesta": ""
                     }])
                     guardar_datos(pd.concat([df_prob, nuevo_p], ignore_index=True), 'Tablero_Problemas')
@@ -3025,6 +3790,7 @@ mapeo_vistas = {
     "🛡️ Calidad del Dato": vista_calidad_dato,
     "📞 Directorio de Red": vista_directorio,
     "🤖 Asistente Redactor VSP": vista_asistente_ia,
+    "🪦 Sala de Mortalidades": vista_sala_mortalidades,
     "🗺️ Georreferenciación": vista_mapas_vsp,
     "📌 Kanban Críticos": vista_kanban_casos,
     "🏥 Silencio Epi": vista_silencio_bai,
