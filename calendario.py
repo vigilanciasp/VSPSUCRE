@@ -413,14 +413,18 @@ def enviar_correo_outlook(destinatario, asunto, cuerpo, adjunto=None):
             part['Content-Disposition'] = f'attachment; filename="{adjunto.name}"'
             msg.attach(part)
         
-        server = smtplib.SMTP('smtp.office365.com', 587)
-        server.starttls()
-        # Iniciamos sesión con la cuenta principal real
-        server.login(login_user, password)
-        # Enviamos el mensaje indicando que proviene del alias
-        server.send_message(msg)
-        server.quit()
-        return True, "Correo enviado correctamente."
+        import socket
+        try:
+            server = smtplib.SMTP('smtp.office365.com', 587, timeout=10)
+            server.starttls()
+            server.login(login_user, password)
+            server.send_message(msg)
+            server.quit()
+            return True, "Correo enviado correctamente."
+        except socket.timeout:
+            return False, "Error: Tiempo de espera agotado. El servidor puede estar bloqueando la conexión."
+        except Exception as e:
+            return False, f"Error: {str(e)}"
     except Exception as e:
         return False, str(e)
 
