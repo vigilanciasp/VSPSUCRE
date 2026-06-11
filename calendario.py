@@ -626,7 +626,7 @@ for idx, sec in enumerate(secciones_5):
                 st.session_state["seccion_actual"] = sec; st.rerun()
 
 # Sexta fila para módulos misceláneos
-secciones_6 = ["🦠 Brotes y ERI", "🛑 Tablero de Problemas", "🤖 Asistente Redactor VSP", "🪦 Sala de Mortalidades"]
+secciones_6 = ["🛑 Tablero de Problemas", "🤖 Asistente Redactor VSP", "🪦 Sala de Mortalidades"]
 if st.session_state.get("rol_conectado") == "Administrador Total":
     secciones_6.append("🎂 Gestionar Cumpleaños")
 nav_cols_6 = st.columns(len(secciones_6))
@@ -1398,7 +1398,6 @@ def vista_enlaces_hc():
                             ruta_final_hc = os.path.join(CARPETA_SOPORTES, nombre_hc)
                             with open(ruta_final_hc, "wb") as f:
                                 f.write(hc_file.getbuffer())
-                            
                             df_solicitudes.at[idx_p, 'Estado'] = "🟢 RECIBIDO"
                             df_solicitudes.at[idx_p, 'Ruta_Documento'] = ruta_final_hc
                             guardar_datos(df_solicitudes, 'Solicitudes_Externas')
@@ -1413,240 +1412,213 @@ def vista_enlaces_hc():
         
     with col_gf:
         st.markdown("<div class='tool-container'>", unsafe_allow_html=True)
+        st.subheader("🌐 Enlaces para Asistencia de Eventos Virtuales")
         
-        herramienta_sel = st.radio("Selecciona una herramienta:", ["🌐 Asistencia Google Forms", "🎥 Salas Virtuales Teams"], horizontal=True, label_visibility="collapsed")
+        tab_generar, tab_historial = st.tabs(["🚀 Generar Nuevo Enlace", "📋 Historial de Enlaces y Descargas"])
         
-        if herramienta_sel == "🎥 Salas Virtuales Teams":
-            st.subheader("🌐 Solicitud de Salas Virtuales (Teams)")
+        with tab_generar:
+            gf_evento = st.selectbox("Tipo de Evento Virtual:", LISTA_TIPOS_EVENTO, key="gf_tipo_v2")
+            gf_tema = st.text_input("Tema Central del Evento:", placeholder="Ej: SAR Dengue", key="gf_tema_v2")
+            gf_resp = st.selectbox("Funcionario Responsable / Ponente:", LISTA_RESPONSABLES, key="gf_resp_v2")
+            gf_fecha = st.date_input("Fecha Programada del Evento:", value=datetime.today(), key="gf_fecha_v2")
             
-            tab_sol_teams, tab_hist_teams = st.tabs(["🎫 Solicitar Sala", "📋 Historial y Enlaces"])
+            btn_generar_link = st.button("🚀 Procesar y Guardar en Bitácora", use_container_width=True, type="primary", key="btn_gen_v2")
             
-            with tab_sol_teams:
-                gf_tema = st.text_input("Tema Central de la Reunión/Evento:", placeholder="Ej: Sala Situacional Dengue")
-                c_ft1, c_ft2, c_ft3 = st.columns(3)
-                gf_fecha = c_ft1.date_input("Fecha Programada del Evento:", value=datetime.today(), key="gf_fecha_v")
-                gf_hora_inicio = c_ft2.time_input("Hora de Inicio:", value=datetime.strptime("08:00", "%H:%M").time(), key="gf_hora_v")
-                gf_hora_fin = c_ft3.time_input("Hora Final:", value=datetime.strptime("10:00", "%H:%M").time(), key="gf_hora_fin_v")
-                gf_resp = st.selectbox("Funcionario Responsable / Ponente:", LISTA_RESPONSABLES, key="gf_resp_v")
-                
-                st.markdown("---")
-                gf_correo_encargado = st.text_input("Correo del Funcionario Encargado de Crear Links:", placeholder="Ej: sistemas@gobernacion.gov.co")
-                
-                if st.button("🚀 Enviar Solicitud de Sala", use_container_width=True, type="primary"):
-                    if "Seleccione..." in [gf_resp] or gf_tema.strip() == "" or gf_correo_encargado.strip() == "":
-                        st.error("❌ Por favor completa todos los campos (Tema, Responsable y Correo del Encargado).")
-                    else:
-                        asunto_teams = f"NUEVA SOLICITUD DE SALA TEAMS: {gf_tema.upper()}"
-                        cuerpo_teams = f"Cordial saludo,\n\nSe requiere la programación urgente de una sala virtual de Teams.\n\nDETALLES DEL EVENTO:\n- Tema: {gf_tema}\n- Fecha: {gf_fecha.strftime('%d/%m/%Y')}\n- Horario: {gf_hora_inicio.strftime('%I:%M %p')} a {gf_hora_fin.strftime('%I:%M %p')}\n- Ponente Responsable: {gf_resp}\n\nPor favor ingresar al Sistema VSP, dirigirse a la pestaña de 'Herramientas de Gestión' -> 'Historial y Enlaces', y asignar el link correspondiente a esta solicitud.\n\nAtentamente,\nSistema Automatizado VSP"
-                        
-                        exito_t, msg_t = enviar_correo_outlook(gf_correo_encargado, asunto_teams, cuerpo_teams)
-                        
-                        if exito_t:
-                            df_teams = cargar_datos('Solicitudes_Teams')
-                            nueva_sol_t = pd.DataFrame([{
-                                "Fecha_Solicitud": datetime.today().strftime("%Y-%m-%d"),
-                                "Fecha_Evento": f"{gf_fecha.strftime('%Y-%m-%d')} ({gf_hora_inicio.strftime('%H:%M')} a {gf_hora_fin.strftime('%H:%M')})",
-                                "Tema": gf_tema.upper(),
-                                "Responsable_Evento": gf_resp,
-                                "Encargado_Links": gf_correo_encargado,
-                                "Estado": "🔴 PENDIENTE",
-                                "Enlace_Teams": ""
-                            }])
-                            guardar_datos(pd.concat([df_teams, nueva_sol_t], ignore_index=True), 'Solicitudes_Teams')
-                            st.session_state["mensaje_exito_temp"] = "✅ ¡Solicitud enviada al encargado y registrada en el historial!"
-                            st.rerun()
-                        else:
-                            st.error(f"❌ Error al notificar al encargado. Detalle: {msg_t}")
-                            
-            with tab_hist_teams:
-                df_teams = cargar_datos('Solicitudes_Teams')
-                if not df_teams.empty:
-                    # Mostrar tabla con estado
-                    st.dataframe(df_teams[["Fecha_Evento", "Tema", "Responsable_Evento", "Estado"]], use_container_width=True, hide_index=True)
-                    
-                    # st.markdown("#### 💬 Recordatorio por WhatsApp")
-                    # st.caption("Solicita el link de la reunión directamente por WhatsApp a quien corresponda.")
-                    
-                    # # Evitar fallos por emojis usando str.contains
-                    # pendientes_w = df_teams[df_teams["Estado"].astype(str).str.contains("PENDIENTE", case=False, na=False)]
-                    # if not pendientes_w.empty:
-                    #     for idx, row in pendientes_w.iterrows():
-                    #         col1, col2 = st.columns([3, 1])
-                    #         with col1:
-                    #             st.markdown(f"**{row['Tema']}** ({row['Fecha_Evento']})")
-                    #         with col2:
-                    #             import urllib.parse
-                    #             cuerpo_w = urllib.parse.quote(f"Hola,\n\nTe escribo para solicitar la creación urgente de un enlace de Teams para el evento:\n\n📌 *Tema:* {row['Tema']}\n⏰ *Fecha/Hora:* {row['Fecha_Evento']}\n\nPor favor ingresa al sistema VSP y asígnalo lo más pronto posible.\n\nGracias.")
-                    #             wa_link = f"https://wa.me/?text={cuerpo_w}"
-                    #             st.markdown(f"<a href='{wa_link}' target='_blank' style='display:inline-block; padding: 5px 10px; background-color: #25D366; color: white; border-radius: 5px; text-decoration: none; font-size: 0.8rem; margin-top: 2px;'>💬 Pedir Link</a>", unsafe_allow_html=True)
-                    
-                    st.markdown("---")
-                    st.markdown("#### 🔗 Asignación de Links (Para uso del Encargado)")
-                    pendientes_t = df_teams[df_teams["Estado"].astype(str).str.contains("PENDIENTE", case=False, na=False)]
-                    if not pendientes_t.empty:
-                        opciones_asig = ["Seleccione una solicitud..."] + [f"{idx} - {row['Tema']} ({row['Fecha_Evento']})" for idx, row in pendientes_t.iterrows()]
-                        sala_sel = st.selectbox("Seleccione la solicitud para asignarle el link:", opciones_asig)
-                        
-                        if sala_sel != "Seleccione una solicitud...":
-                            idx_sala = int(sala_sel.split(" - ")[0])
-                            link_ingresado = st.text_input("Pegue aquí el enlace de Microsoft Teams:")
-                            
-                            if st.button("💾 Guardar y Asignar Enlace", use_container_width=True):
-                                if link_ingresado.strip() == "":
-                                    st.error("❌ El enlace no puede estar vacío.")
-                                else:
-                                    df_teams.at[idx_sala, 'Estado'] = "🟢 ASIGNADO"
-                                    df_teams.at[idx_sala, 'Enlace_Teams'] = link_ingresado.strip()
-                                    guardar_datos(df_teams, 'Solicitudes_Teams')
-                                    st.session_state["mensaje_exito_temp"] = "✅ ¡Enlace de Teams asignado exitosamente!"
-                                    st.rerun()
-                    else:
-                        st.info("✅ No hay salas virtuales pendientes por asignar.")
-                        
-                    st.markdown("---")
-                    st.markdown("#### 📋 Copiar Enlaces Asignados")
-                    asignadas_t = df_teams[df_teams["Estado"] == "🟢 ASIGNADO"]
-                    if not asignadas_t.empty:
-                        for idx, row in asignadas_t.iterrows():
-                            st.success(f"**{row['Tema']}** ({row['Fecha_Evento']} | {row['Responsable_Evento']})\n\n🔗 `{row['Enlace_Teams']}`")
-                            st.link_button("🌍 Unirse a la Sala", row['Enlace_Teams'], use_container_width=True)
-                            
-                    if st.session_state["rol_conectado"] == "Administrador Total":
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        with st.expander("🗑️ Depuración de Salas (Administrador)"):
-                            opciones_borrar_t = ["Seleccione una sala para eliminar..."] + [f"{idx} - {row['Tema']} ({row['Fecha_Evento']})" for idx, row in df_teams.iterrows()]
-                            sala_a_borrar = st.selectbox("Sala a eliminar:", opciones_borrar_t)
-                            if sala_a_borrar != "Seleccione una sala para eliminar...":
-                                idx_del_t = int(sala_a_borrar.split(" - ")[0])
-                                if st.button("❌ Confirmar Eliminación Definitiva", use_container_width=True):
-                                    df_teams_actualizado = df_teams.drop(df_teams.index[idx_del_t])
-                                    guardar_datos(df_teams_actualizado, 'Solicitudes_Teams')
-                                    st.session_state["mensaje_exito_temp"] = "🗑️ Sala eliminada del historial correctamente."
-                                    st.rerun()
+            if btn_generar_link:
+                if "Seleccione..." in [gf_evento, gf_resp] or gf_tema.strip() == "":
+                    st.error("❌ Por favor completa todos los campos obligatorios para procesar los enlaces.")
                 else:
-                    st.info("No se han registrado solicitudes de salas virtuales.")
-        else:
-            st.subheader("🌐 Enlaces para Asistencia de Eventos Virtuales")
-            
-            tab_generar, tab_historial = st.tabs(["🚀 Generar Nuevo Enlace", "📋 Historial de Enlaces y Descargas"])
-            
-            with tab_generar:
-                gf_evento = st.selectbox("Tipo de Evento Virtual:", LISTA_TIPOS_EVENTO, key="gf_tipo_v2")
-                gf_tema = st.text_input("Tema Central del Evento:", placeholder="Ej: SAR Dengue", key="gf_tema_v2")
-                gf_resp = st.selectbox("Funcionario Responsable / Ponente:", LISTA_RESPONSABLES, key="gf_resp_v2")
-                gf_fecha = st.date_input("Fecha Programada del Evento:", value=datetime.today(), key="gf_fecha_v2")
-                
-                btn_generar_link = st.button("🚀 Procesar y Guardar en Bitácora", use_container_width=True, type="primary", key="btn_gen_v2")
-                
-                if btn_generar_link:
-                    if "Seleccione..." in [gf_evento, gf_resp] or gf_tema.strip() == "":
-                        st.error("❌ Por favor completa todos los campos obligatorios para procesar los enlaces.")
-                    else:
-                        url_limpia = BASE_GOOGLE_FORMS.split("?")[0]
-                        # Generamos un tema único concatenando la fecha, así evitamos cruce de asistencias en Excel
-                        tema_unico = f"{gf_tema.upper().strip()} ({gf_fecha.strftime('%d-%m-%Y')})"
-                        link_generado = f"{url_limpia}?usp=pp_url&{ID_TEMA_FORM}={urllib.parse.quote(tema_unico)}"
-                        
-                        df_historial = cargar_datos('Historial_Enlaces')
-                        nuevo_registro = pd.DataFrame([{
-                            "Fecha_Registro": gf_fecha.strftime("%Y-%m-%d"),
-                            "Tipo_Evento": gf_evento,
-                            "Tema_Evento": tema_unico,
-                            "Responsable_Ponente": gf_resp,
-                            "Enlace_Formulario": link_generado
-                        }])
-                        guardar_datos(pd.concat([df_historial, nuevo_registro], ignore_index=True), 'Historial_Enlaces')
-                        
-                        st.session_state["mensaje_exito_temp"] = "🎉 ¡Enlace generado con éxito e indexado en la bitácora!"
-                        st.rerun()
-                        
-            with tab_historial:
-                df_historial = cargar_datos('Historial_Enlaces')
-                if not df_historial.empty:
-                    busqueda = st.text_input("🔍 Buscar en la bitácora (Filtra por Tema, Ponente o Tipo):")
-                    if busqueda:
-                        mask = df_historial.astype(str).apply(lambda col: col.str.contains(busqueda, case=False, na=False)).any(axis=1)
-                        df_historial = df_historial[mask]
+                    url_limpia = BASE_GOOGLE_FORMS.split("?")[0]
+                    tema_unico = f"{gf_tema.upper().strip()} ({gf_fecha.strftime('%d-%m-%Y')})"
+                    link_generado = f"{url_limpia}?usp=pp_url&{ID_TEMA_FORM}={urllib.parse.quote(tema_unico)}"
                     
-                    if not df_historial.empty:
-                        st.dataframe(df_historial[["Fecha_Registro", "Tipo_Evento", "Tema_Evento", "Responsable_Ponente"]], use_container_width=True, hide_index=True)
-                        opciones_combo = ["Seleccione un evento..."] + [f"{idx} - {row['Tema_Evento']} [{row['Fecha_Registro']}]" for idx, row in df_historial.iterrows()]
-                        seleccion_registro = st.selectbox("Seleccione un evento para recuperar sus accesos:", opciones_combo)
-                        
-                        if seleccion_registro != "Seleccione un evento...":
-                            idx_h = int(seleccion_registro.split(" - ")[0])
-                            fila_h = df_historial.iloc[idx_h]
-                            tema_sel_vsp = str(fila_h["Tema_Evento"]).strip()
-                            
-                            st.markdown("#### 🔗 Enlace para Responder (Compartir)")
-                            st.code(fila_h["Enlace_Formulario"], language="markdown")
-                            st.link_button("🌍 Abrir Formulario en Línea", fila_h["Enlace_Formulario"], use_container_width=True)
-                            
-                            st.markdown("---")
-                            st.markdown("#### 📥 Enlace de Descarga de Respuestas a Excel")
-                            
-                            if URL_GOOGLE_SHEET and "docs.google.com/spreadsheets" in URL_GOOGLE_SHEET and URL_GOOGLE_SHEET != "TU_LINK_DE_GOOGLE_SHEETS_AQUI":
-                                try:
-                                    base_sheet_url = URL_GOOGLE_SHEET.split("/edit")[0]
-                                    export_url = f"{base_sheet_url}/export?format=csv"
-                                    df_all = pd.read_csv(export_url).fillna("")
-                                    
-                                    mask = df_all.astype(str).apply(lambda x: x.str.upper().str.contains(tema_sel_vsp.upper())).any(axis=1)
-                                    df_filtrado = df_all[mask]
-                                    
-                                    if not df_filtrado.empty:
-                                        st.success(f"✅ ¡Se detectaron {len(df_filtrado)} participantes registrados en la nube!")
-                                        with st.expander("👁️ Ver Vista Previa de Asistentes"):
-                                            st.dataframe(df_filtrado, use_container_width=True)
-                                        df_a_descargar = df_filtrado
-                                    else:
-                                        st.info(f"ℹ️ Aún no hay respuestas en la nube para '{tema_sel_vsp}'. El botón generará el formato con los encabezados oficiales.")
-                                        df_a_descargar = pd.DataFrame(columns=df_all.columns)
-                                    
-                                    buffer_excel = io.BytesIO()
-                                    with pd.ExcelWriter(buffer_excel, engine='openpyxl') as wr:
-                                        df_a_descargar.to_excel(wr, index=False, sheet_name='Asistencia_Filtrada')
-                                    
-                                    st.download_button(
-                                        label=f"📥 Descargar Archivo Excel de: {tema_sel_vsp} (.xlsx)",
-                                        data=buffer_excel.getvalue(),
-                                        file_name=f"asistencias_{tema_sel_vsp.replace(' ', '_')}_{datetime.today().strftime('%Y%m%d')}.xlsx",
-                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                        use_container_width=True
-                                    )
-                                except Exception as e:
-                                    st.error(f"Error de conexión con Google Sheets: {e}")
-                            else:
-                                st.info("⚠️ Para habilitar la descarga automatizada, pegue el link público de su Google Sheet en la constante `URL_GOOGLE_SHEET` (Línea 41).")
-                            
-                            if st.session_state["rol_conectado"] == "Administrador Total":
-                                st.markdown("<br>", unsafe_allow_html=True)
-                                with st.expander("🗑️ Depuración de Enlaces (Administrador)"):
-                                    if st.button("❌ Confirmar Eliminación Definitiva del Enlace", key=f"btn_del_link_{idx_h}", use_container_width=True):
-                                        df_historial_actualizado = df_historial.drop(df_historial.index[idx_h])
-                                        guardar_datos(df_historial_actualizado, 'Historial_Enlaces')
-                                        st.session_state["mensaje_exito_temp"] = "🗑️ Enlace eliminado de la bitácora correctamente."
-                                        st.rerun()
-                                        
-                    else:
-                        st.info("No se encontraron coincidencias para la búsqueda.")
-                else:
-                    st.info("Bitácora vacía. Genere un nuevo enlace para iniciar el historial.")
+                    df_historial = cargar_datos('Historial_Enlaces')
+                    nuevo_registro = pd.DataFrame([{
+                        "Fecha_Registro": gf_fecha.strftime("%Y-%m-%d"),
+                        "Tipo_Evento": gf_evento,
+                        "Tema_Evento": tema_unico,
+                        "Responsable_Ponente": gf_resp,
+                        "Enlace_Formulario": link_generado
+                    }])
+                    guardar_datos(pd.concat([df_historial, nuevo_registro], ignore_index=True), 'Historial_Enlaces')
+                    st.session_state["mensaje_exito_temp"] = "🎉 ¡Enlace generado con éxito e indexado en la bitácora!"
+                    st.rerun()
                     
+        with tab_historial:
+            df_historial = cargar_datos('Historial_Enlaces')
+            
             if not df_historial.empty:
-                st.markdown("---")
-                st.markdown("#### 📄 Exportación para Informe de Empalme")
-                st.caption("Genera un reporte consolidado de todos los enlaces estructurados para rendición de cuentas.")
-                buffer_empalme = io.BytesIO()
-                with pd.ExcelWriter(buffer_empalme, engine='openpyxl') as wr:
-                    df_historial.to_excel(wr, index=False, sheet_name='Historial_Asistencias_VSP')
-                st.download_button(
-                    label="📥 Exportar Historial Completo para Informe de Empalme",
-                    data=buffer_empalme.getvalue(),
-                    file_name=f"historial_asistencias_empalme_{datetime.today().strftime('%Y%m%d')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
+                # 1. Auto-depuración (Borrar mayores a 10 días automáticamente)
+                hoy = datetime.today()
+                def es_reciente(d_str):
+                    try:
+                        d = datetime.strptime(str(d_str), "%Y-%m-%d")
+                        return (hoy - d).days <= 10
+                    except:
+                        return True
+                
+                indices_recientes = df_historial["Fecha_Registro"].apply(es_reciente)
+                if not indices_recientes.all():
+                    df_historial = df_historial[indices_recientes].reset_index(drop=True)
+                    guardar_datos(df_historial, 'Historial_Enlaces')
+            
+            if not df_historial.empty:
+                st.info("💡 Los enlaces tienen una caducidad automática de 10 días en el historial.")
+                busqueda = st.text_input("🔍 Buscar en la bitácora (Filtra por Tema, Ponente o Tipo):")
+                if busqueda:
+                    mask = df_historial.astype(str).apply(lambda col: col.str.contains(busqueda, case=False, na=False)).any(axis=1)
+                    df_historial = df_historial[mask]
+                
+                if not df_historial.empty:
+                    # 2. Precargar las respuestas de Google Forms UNA SOLA VEZ
+                    df_all_forms = pd.DataFrame()
+                    if URL_GOOGLE_SHEET and "docs.google.com/spreadsheets" in URL_GOOGLE_SHEET and URL_GOOGLE_SHEET != "TU_LINK_DE_GOOGLE_SHEETS_AQUI":
+                        try:
+                            base_sheet_url = URL_GOOGLE_SHEET.split("/edit")[0]
+                            export_url = f"{base_sheet_url}/export?format=csv"
+                            df_all_forms = pd.read_csv(export_url).fillna("")
+                        except:
+                            pass
+                    
+                    # Encabezados de la tabla
+                    c1, c2, c3, c4 = st.columns([2, 3, 2, 1])
+                    c1.markdown("**Tema y Responsable**")
+                    c2.markdown("**Enlace (Copiar)**")
+                    c3.markdown("**Descargas**")
+                    if st.session_state.get("rol_conectado") == "Administrador Total":
+                        c4.markdown("**Acción**")
+                    st.divider()
+                    
+                    for idx, row in df_historial.iterrows():
+                        tema_vsp = str(row["Tema_Evento"]).strip()
+                        
+                        c1, c2, c3, c4 = st.columns([2, 3, 2, 1])
+                        
+                        with c1:
+                            st.markdown(f"**{tema_vsp}**")
+                            st.caption(f"🗓️ {row['Fecha_Registro']} | 👤 {row['Responsable_Ponente']} | 🏷️ {row['Tipo_Evento']}")
+                            
+                        with c2:
+                            # st.code muestra el link con botón de copiar sin volverlo azul ni redirigir
+                            st.code(row['Enlace_Formulario'], language=None)
+                            
+                        with c3:
+                            # Filtrar datos de forms (USANDO REGEX=FALSE PARA EVITAR BUG DE PARENTESIS)
+                            df_a_descargar = pd.DataFrame()
+                            if not df_all_forms.empty:
+                                mask = df_all_forms.astype(str).apply(lambda x: x.str.upper().str.contains(tema_vsp.upper(), regex=False)).any(axis=1)
+                                df_a_descargar = df_all_forms[mask]
+                            
+                            # --- 1. MAPEAR COLUMNAS AL FORMATO OFICIAL (Solo para el PDF) ---
+                            df_mapeado = pd.DataFrame()
+                            df_mapeado['No.'] = range(1, len(df_a_descargar) + 1)
+                            def buscar_col(keywords):
+                                for col in df_a_descargar.columns:
+                                    col_str = str(col).upper()
+                                    if any(kw in col_str for kw in keywords):
+                                        return df_a_descargar[col].tolist()
+                                return [""] * len(df_a_descargar)
+                            
+                            df_mapeado['No. Identificación'] = buscar_col(['IDENTIFICACION', 'IDENTIFICACIÓN', 'CÉDULA', 'CEDULA', 'DOCUMENTO', 'CC', 'C.C'])
+                            df_mapeado['Nombres y Apellidos'] = buscar_col(['NOMBRE', 'APELLIDO'])
+                            df_mapeado['Cargo'] = buscar_col(['CARGO', 'PROFESION', 'PERFIL'])
+                            df_mapeado['Entidad o Dependencia'] = buscar_col(['ENTIDAD', 'INSTITUCION', 'DEPENDENCIA', 'MUNICIPIO', 'EMPRESA', 'LUGAR', 'TRABAJO', 'ESE', 'IPS', 'EAPB'])
+                            df_mapeado['Celular'] = buscar_col(['CELULAR', 'TELEFONO', 'TELÉFONO', 'WHATSAPP'])
+                            df_mapeado['Correo'] = buscar_col(['CORREO', 'EMAIL', 'E-MAIL'])
+                            df_mapeado['Firma y Autorización'] = [""] * len(df_a_descargar)
+                            
+                            # --- 2. GENERAR EXCEL (SIN IMAGENES NI FORMATO EXTRA, SOLO LOS DATOS) ---
+                            buffer_excel = io.BytesIO()
+                            df_a_descargar.to_excel(buffer_excel, index=False, engine='openpyxl')
+                            
+                            # --- 3. GENERAR PDF ---
+                            pdf_disponible = False
+                            try:
+                                from fpdf import FPDF
+                                class PDFAsistencia(FPDF):
+                                    def footer(self):
+                                        self.set_y(-30)
+                                        for ext in ['png', 'jpg', 'jpeg']:
+                                            if os.path.exists(f"pie.{ext}"):
+                                                self.image(f"pie.{ext}", x=20, w=240)
+                                                break
+                                                
+                                pdf = PDFAsistencia(orientation='L', unit='mm', format='Letter')
+                                pdf.add_page()
+                                
+                                for ext in ['png', 'jpg', 'jpeg']:
+                                    if os.path.exists(f"membrete.{ext}"):
+                                        pdf.image(f"membrete.{ext}", x=90, y=10, w=100)
+                                        pdf.ln(35)
+                                        break
+                                        
+                                pdf.set_font("Arial", 'B', 12)
+                                pdf.cell(0, 10, f"LISTADO DE ASISTENCIA - {tema_vsp.upper()}", ln=True, align='C')
+                                pdf.ln(5)
+                                
+                                pdf.set_font("Arial", 'B', 8)
+                                col_widths = [10, 25, 60, 35, 45, 25, 40, 20]
+                                cols = ['No.', 'Identidad', 'Nombres y Apellidos', 'Cargo', 'Entidad', 'Celular', 'Correo', 'Firma']
+                                
+                                for w, col_name in zip(col_widths, cols):
+                                    pdf.cell(w, 8, col_name, border=1, align='C')
+                                pdf.ln()
+                                
+                                pdf.set_font("Arial", '', 8)
+                                for i, r_pdf in df_mapeado.iterrows():
+                                    pdf.cell(col_widths[0], 6, str(r_pdf['No.'])[:5], border=1)
+                                    pdf.cell(col_widths[1], 6, str(r_pdf['No. Identificación'])[:15], border=1)
+                                    pdf.cell(col_widths[2], 6, str(r_pdf['Nombres y Apellidos'])[:45], border=1)
+                                    pdf.cell(col_widths[3], 6, str(r_pdf['Cargo'])[:25], border=1)
+                                    pdf.cell(col_widths[4], 6, str(r_pdf['Entidad o Dependencia'])[:30], border=1)
+                                    pdf.cell(col_widths[5], 6, str(r_pdf['Celular'])[:15], border=1)
+                                    pdf.cell(col_widths[6], 6, str(r_pdf['Correo'])[:25], border=1)
+                                    pdf.cell(col_widths[7], 6, "", border=1)
+                                    pdf.ln()
+                                    
+                                buffer_pdf = pdf.output(dest='S').encode('latin1')
+                                pdf_disponible = True
+                            except Exception as e:
+                                pass
+                            
+                            # Botones de descarga alineados horizontalmente
+                            col_ex, col_pd = st.columns(2)
+                            with col_ex:
+                                st.download_button(
+                                    label=f"📊 Excel ({len(df_a_descargar)})",
+                                    data=buffer_excel.getvalue(),
+                                    file_name=f"asistencias_{tema_vsp.replace(' ', '_')}.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    use_container_width=True,
+                                    key=f"dl_ex_{idx}"
+                                )
+                            with col_pd:
+                                if pdf_disponible:
+                                    st.download_button(
+                                        label=f"📄 PDF",
+                                        data=buffer_pdf,
+                                        file_name=f"asistencias_{tema_vsp.replace(' ', '_')}.pdf",
+                                        mime="application/pdf",
+                                        use_container_width=True,
+                                        key=f"dl_pd_{idx}"
+                                    )
+                                    
+                        with c4:
+                            if st.session_state.get("rol_conectado") == "Administrador Total":
+                                if st.button("🗑️ Elim", key=f"del_evt_{idx}", use_container_width=True):
+                                    df_ori = cargar_datos('Historial_Enlaces')
+                                    if idx in df_ori.index:
+                                        df_ori = df_ori.drop(idx)
+                                        guardar_datos(df_ori, 'Historial_Enlaces')
+                                        st.session_state["mensaje_exito_temp"] = "🗑️ Enlace eliminado correctamente."
+                                        st.rerun()
+                        st.divider()
+                else:
+                    st.info("No se encontraron coincidencias para la búsqueda.")
+            else:
+                st.info("Bitácora vacía. Genere un nuevo enlace para iniciar el historial.")
+                
+        st.markdown("</div>", unsafe_allow_html=True)
         
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1789,29 +1761,53 @@ def vista_alertas_inventario():
     with t_alertas:
         st.markdown("#### 📢 Alertas y Lineamientos Nacionales Activos")
         df_solo_alertas = df_alertas[df_alertas["Tipo_Item"] == "CIRCULAR_ALERTA"] if not df_alertas.empty else pd.DataFrame()
+        
         if not df_solo_alertas.empty:
-            for _, fila in df_solo_alertas.iterrows():
-                color_borde = "#ef4444" if "ALTO" in str(fila["Clasificacion_Riesgo"]).upper() else "#eab308" if "MEDIO" in str(fila["Clasificacion_Riesgo"]).upper() else "#3b82f6"
-                st.markdown(f"""
-                <div style='padding:12px; border-radius:8px; background-color:rgba(30,41,59,0.5); margin-bottom:10px; border-left:5px solid {color_borde};'>
-                    <span style='float:right; font-size:0.85em; background-color:rgba(255,255,255,0.1); padding:3px 8px; border-radius:15px;'>📅 {fila['Fecha_Registro']}</span>
-                    <h5 style='margin:0; color:#cbd5e1;'>📢 {fila['Titulo_Nombre']}</h5>
-                    <p style='margin:5px 0 0 0; font-size:0.95em; color:#94a3b8;'>{fila['Descripcion_Cantidad']}</p>
-                    <small style='color:{color_borde}; font-weight:bold;'>Prioridad de Intervención: {fila['Clasificacion_Riesgo']}</small>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Mostrar botón de descarga si existe soporte documental
-                ruta_doc = fila.get("Ruta_Documento", "")
-                if pd.notna(ruta_doc) and str(ruta_doc).strip() != "" and os.path.exists(str(ruta_doc)):
-                    with open(str(ruta_doc), "rb") as f:
-                        btn_descarga = st.download_button(
-                            label="📥 Descargar Circular / Documento Soporte",
-                            data=f,
-                            file_name=os.path.basename(str(ruta_doc)),
-                            key=f"dl_alerta_{_}"
-                        )
-                st.markdown("<br>", unsafe_allow_html=True)
+            # Contadores visuales
+            altas = len(df_solo_alertas[df_solo_alertas["Clasificacion_Riesgo"].astype(str).str.upper().str.contains("ALTO")])
+            medias = len(df_solo_alertas[df_solo_alertas["Clasificacion_Riesgo"].astype(str).str.upper().str.contains("MEDIO")])
+            bajas = len(df_solo_alertas[df_solo_alertas["Clasificacion_Riesgo"].astype(str).str.upper().str.contains("BAJO")])
+            
+            c_a, c_m, c_b = st.columns(3)
+            c_a.metric("🔴 Prioridad Alta", altas)
+            c_m.metric("🟡 Prioridad Media", medias)
+            c_b.metric("🔵 Prioridad Baja", bajas)
+            
+            st.markdown("---")
+            # Buscador
+            texto_busqueda = st.text_input("🔍 Buscar Circular por título, descripción o palabra clave:", "")
+            
+            df_mostrar = df_solo_alertas.copy()
+            if texto_busqueda:
+                mask = df_mostrar["Titulo_Nombre"].astype(str).str.contains(texto_busqueda, case=False, na=False) | \
+                       df_mostrar["Descripcion_Cantidad"].astype(str).str.contains(texto_busqueda, case=False, na=False)
+                df_mostrar = df_mostrar[mask]
+            
+            if not df_mostrar.empty:
+                for _, fila in df_mostrar.iterrows():
+                    color_borde = "#ef4444" if "ALTO" in str(fila["Clasificacion_Riesgo"]).upper() else "#eab308" if "MEDIO" in str(fila["Clasificacion_Riesgo"]).upper() else "#3b82f6"
+                    st.markdown(f"""
+                    <div style='padding:12px; border-radius:8px; background-color:rgba(30,41,59,0.5); margin-bottom:10px; border-left:5px solid {color_borde};'>
+                        <span style='float:right; font-size:0.85em; background-color:rgba(255,255,255,0.1); padding:3px 8px; border-radius:15px;'>📅 {fila['Fecha_Registro']}</span>
+                        <h5 style='margin:0; color:#cbd5e1;'>📢 {fila['Titulo_Nombre']}</h5>
+                        <p style='margin:5px 0 0 0; font-size:0.95em; color:#94a3b8;'>{fila['Descripcion_Cantidad']}</p>
+                        <small style='color:{color_borde}; font-weight:bold;'>Prioridad de Intervención: {fila['Clasificacion_Riesgo']}</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Mostrar botón de descarga si existe soporte documental
+                    ruta_doc = fila.get("Ruta_Documento", "")
+                    if pd.notna(ruta_doc) and str(ruta_doc).strip() != "" and os.path.exists(str(ruta_doc)):
+                        with open(str(ruta_doc), "rb") as f:
+                            st.download_button(
+                                label="📥 Descargar Circular / Documento Soporte",
+                                data=f,
+                                file_name=os.path.basename(str(ruta_doc)),
+                                key=f"dl_alerta_{_}"
+                            )
+                    st.markdown("<br>", unsafe_allow_html=True)
+            else:
+                st.warning("No se encontraron circulares con ese término de búsqueda.")
         else: 
             st.info("No hay circulares epidemiológicas urgentes en el histórico.")
         
@@ -1849,8 +1845,24 @@ def vista_alertas_inventario():
     with t_insumos:
         st.markdown("#### 🧪 Insumos Técnicos para Respuesta Contingencial a Brotes")
         df_solo_insumos = df_alertas[df_alertas["Tipo_Item"] == "INSUMO_LAB"] if not df_alertas.empty else pd.DataFrame()
+        
         if not df_solo_insumos.empty:
-            st.dataframe(df_solo_insumos[["Fecha_Registro", "Titulo_Nombre", "Descripcion_Cantidad", "Clasificacion_Riesgo"]].rename(columns={"Titulo_Nombre": "Insumo / Kit Técnico", "Descripcion_Cantidad": "Stock Unidades", "Clasificacion_Riesgo": "Código Lote / Ubicación"}), use_container_width=True, hide_index=True)
+            busq_insumos = st.text_input("🔍 Buscar Insumo Técnico / Reactivo:", "")
+            df_mostrar_insumos = df_solo_insumos.copy()
+            if busq_insumos:
+                mask_insumos = df_mostrar_insumos["Titulo_Nombre"].astype(str).str.contains(busq_insumos, case=False, na=False) | \
+                               df_mostrar_insumos["Clasificacion_Riesgo"].astype(str).str.contains(busq_insumos, case=False, na=False)
+                df_mostrar_insumos = df_mostrar_insumos[mask_insumos]
+                
+            df_formateado = df_mostrar_insumos[["Fecha_Registro", "Titulo_Nombre", "Descripcion_Cantidad", "Clasificacion_Riesgo"]].rename(
+                columns={
+                    "Fecha_Registro": "Fecha 📅",
+                    "Titulo_Nombre": "Insumo / Kit Técnico 🧪", 
+                    "Descripcion_Cantidad": "Stock Unidades 📦", 
+                    "Clasificacion_Riesgo": "Código Lote / Ubicación 📌"
+                }
+            )
+            st.dataframe(df_formateado, use_container_width=True, hide_index=True)
         else: 
             st.info("Sin registros de stock de reactivos o kits de toma de muestras.")
         
@@ -2011,7 +2023,7 @@ def vista_panel_maestro():
                     e_rol = e_rol_sel
                 
                 permisos_actuales = [p.strip() for p in str(datos_u.get("Permisos", "🏠 Inicio,📝 Registrar Actividad")).split(",") if p.strip()]
-                lista_todas_vistas_f = list(mapeo_vistas.keys()) if 'mapeo_vistas' in globals() else ["🏠 Inicio", "📝 Registrar Actividad", "🧑‍⚕️ Disponibilidad Semanal", "🤝 Compromisos Técnicos", "📨 Enlaces y Solicitudes HC", "📁 Actas e Informes", "🚨 Alertas e Inventario", "📊 Filtros y Dashboard", "🦠 Brotes y ERI", "🛑 Tablero de Problemas", "🏘️ Vigilancia Comunitaria (VBC)", "📊 Tableros SIVIGILA", "🛡️ Calidad del Dato", "📇 Directorio de Red", "🤖 Asistente Redactor VSP", "👑 Panel Maestro y Roles", "🕵️ Auditoría y Logs", "🪦 Sala de Mortalidades"]
+                lista_todas_vistas_f = list(mapeo_vistas.keys()) if 'mapeo_vistas' in globals() else ["🏠 Inicio", "📝 Registrar Actividad", "🧑‍⚕️ Disponibilidad Semanal", "🤝 Compromisos Técnicos", "📨 Enlaces y Solicitudes HC", "📁 Actas e Informes", "🚨 Alertas e Inventario", "📊 Filtros y Dashboard", "🛑 Tablero de Problemas", "🏘️ Vigilancia Comunitaria (VBC)", "📊 Tableros SIVIGILA", "🛡️ Calidad del Dato", "📇 Directorio de Red", "🤖 Asistente Redactor VSP", "👑 Panel Maestro y Roles", "🕵️ Auditoría y Logs", "🪦 Sala de Mortalidades"]
                 permisos_actuales = [p for p in permisos_actuales if p in lista_todas_vistas_f]
                 
                 nuevo_permiso = st.multiselect(f"Permisos de Módulos:", lista_todas_vistas_f, default=permisos_actuales, key=f"ms_{u_edit}")
@@ -2065,55 +2077,108 @@ def vista_panel_maestro():
 
 def vista_vbc():
     st.markdown("### 🏘️ Vigilancia Basada en la Comunidad (VBC)")
+    st.info("Sistema de Alerta Temprana Comunitaria. Escuche a la comunidad y detenga brotes antes de que lleguen al hospital.")
     df_vbc = cargar_datos('VBC_Rumores')
-    t_reg, t_matriz, t_dash = st.tabs(["📝 Registrar Rumor", "📋 Matriz de Seguimiento", "📊 Analítica VBC"])
+    t_reg, t_matriz, t_dash = st.tabs(["📝 Registrar Rumor", "📋 Seguimiento y Verificación", "📊 Analítica VBC"])
+
+    lista_sindromes = [
+        "Síndrome Febril (Posible Dengue/Malaria/Zika/Chikungunya)", 
+        "Síndrome Respiratorio Agudo", 
+        "Enfermedad Diarreica Aguda (EDA)", 
+        "Enfermedad Transmitida por Alimentos (ETA)", 
+        "Mortalidad Inusual de Causa Desconocida", 
+        "Zoonosis / Animales Enfermos / Mordeduras",
+        "Síndrome Ictérico (Posible Leptospirosis/Fiebre Amarilla)",
+        "Síndrome Hemorrágico",
+        "Síndrome Neurológico (Parálisis/Meningitis)",
+        "Síndrome Eruptivo (Rash / Posible Sarampión)",
+        "Intoxicación Masiva (Agua/Químicos/Medicamentos)",
+        "Evento de Salud Mental / Intento de Suicidio Múltiple",
+        "Otro"
+    ]
 
     with t_reg:
         with st.form("form_vbc", clear_on_submit=True):
-            vbc_fecha = st.date_input("Fecha de Reporte", value=datetime.today())
+            vbc_fecha = st.date_input("Fecha de Recepción del Rumor", value=datetime.today())
             vbc_mun = st.selectbox("Municipio", LISTA_MUNICIPIOS)
             vbc_vereda = st.text_input("Comunidad / Vereda / Barrio")
-            vbc_sindrome = st.selectbox("Tipo de Evento o Síndrome", ["Síndrome Febril (Posible Dengue/Malaria)", "Síndrome Respiratorio", "Enfermedad Diarreica Aguda (EDA)", "Enfermedad Transmitida por Alimentos (ETA)", "Mortalidad Inusual", "Zoonosis / Animales Enfermos", "Otro"])
-            vbc_fuente = st.text_input("Fuente de Información (Ej: Líder, Docente, Redes Sociales)")
-            vbc_desc = st.text_area("Descripción Detallada del Evento/Rumor")
-            vbc_resp = st.selectbox("Responsable de Verificación", LISTA_RESPONSABLES)
-            if st.form_submit_button("🚨 Reportar Alerta a VSP"):
+            vbc_sindrome = st.selectbox("Tipo de Evento o Síndrome", lista_sindromes)
+            vbc_fuente = st.text_input("Fuente de Información (Ej: Líder Comunal, Docente, Redes Sociales)")
+            vbc_desc = st.text_area("Descripción Detallada del Rumor")
+            vbc_resp = st.selectbox("Epidemiólogo Responsable de Verificación", LISTA_RESPONSABLES)
+            
+            if st.form_submit_button("🚨 Disparar Alerta Temprana"):
                 nuevo_rumor = pd.DataFrame([{
                     "Fecha_Reporte": vbc_fecha.strftime("%Y-%m-%d"), "Municipio": vbc_mun,
                     "Comunidad_Vereda": vbc_vereda, "Tipo_Sindrome": vbc_sindrome,
                     "Fuente_Reporte": vbc_fuente, "Descripcion_Evento": vbc_desc,
-                    "Estado_Verificacion": "🔴 Pendiente de Verificación", "Responsable_Verificacion": vbc_resp
+                    "Estado_Verificacion": "🔴 Pendiente de Verificación", "Responsable_Verificacion": vbc_resp,
+                    "Resultado_Investigacion": "", "Ruta_Soporte_VBC": ""
                 }])
                 guardar_datos(pd.concat([df_vbc, nuevo_rumor], ignore_index=True), 'VBC_Rumores')
+                registrar_log(f"Alerta VBC Registrada: {vbc_sindrome} en {vbc_mun}", "Vigilancia Comunitaria")
                 st.session_state["mensaje_exito_temp"] = "📢 Alerta comunitaria registrada exitosamente."
                 st.rerun()
+
     with t_matriz:
+        st.markdown("#### 🔄 Panel de Verificación de Rumores")
         if not df_vbc.empty:
-            st.dataframe(df_vbc, use_container_width=True, hide_index=True)
-            if st.session_state["rol_conectado"] != "Consulta / Invitado":
-                st.markdown("#### 🔄 Actualizar Estado de Alerta")
-                opciones = [f"{idx} - {row['Municipio']}: {row['Tipo_Sindrome']} ({row['Fecha_Reporte']})" for idx, row in df_vbc.iterrows()]
-                sel_rumor = st.selectbox("Seleccione el rumor a verificar:", opciones)
-                if sel_rumor:
-                    idx_r = int(sel_rumor.split(" - ")[0])
-                    nuevo_est = st.selectbox("Estado de la Investigación:", ["🔴 Pendiente de Verificación", "🟡 Descartado / Falsa Alarma", "🟢 Confirmado - Brote Activo", "🟢 Confirmado - Caso Aislado"])
-                    if st.button("💾 Actualizar Estado"):
-                        df_vbc.at[idx_r, "Estado_Verificacion"] = nuevo_est
-                        guardar_datos(df_vbc, 'VBC_Rumores')
-                        st.success("Estado actualizado.")
-                        st.rerun()
+            for idx, row in df_vbc.iterrows():
+                estado_actual = str(row.get('Estado_Verificacion', '🔴 Pendiente de Verificación'))
+                color = "🔴" if "Pendiente" in estado_actual else "🟡" if "Falsa Alarma" in estado_actual else "🟢"
+                
+                with st.expander(f"{color} {row.get('Municipio', 'N/A')} | {row.get('Tipo_Sindrome', 'N/A')} | Fecha: {row.get('Fecha_Reporte', 'N/A')}"):
+                    st.markdown(f"**Vereda/Barrio:** {row.get('Comunidad_Vereda', '')} | **Fuente:** {row.get('Fuente_Reporte', '')}")
+                    st.markdown(f"**Descripción del Rumor:** {row.get('Descripcion_Evento', '')}")
+                    st.markdown(f"**Responsable Asignado:** {row.get('Responsable_Verificacion', '')}")
+                    
+                    res_previo = str(row.get('Resultado_Investigacion', ''))
+                    if res_previo and res_previo != "nan":
+                        st.info(f"**Hallazgos de Campo:** {res_previo}")
+                        
+                    ruta_sop = str(row.get('Ruta_Soporte_VBC', ''))
+                    if ruta_sop and ruta_sop != "nan" and os.path.exists(ruta_sop):
+                        with open(ruta_sop, "rb") as f:
+                            st.download_button("📥 Descargar Acta de Campo", data=f.read(), file_name=os.path.basename(ruta_sop), key=f"down_vbc_{idx}")
+                    
+                    if st.session_state.get("rol_conectado") != "Consulta / Invitado":
+                        with st.form(f"form_update_{idx}"):
+                            opciones_est = ["🔴 Pendiente de Verificación", "🟡 Descartado / Falsa Alarma", "🟢 Confirmado - Caso Aislado", "🟢 Confirmado - Brote Activo"]
+                            idx_est = opciones_est.index(estado_actual) if estado_actual in opciones_est else 0
+                            nuevo_est = st.selectbox("Actualizar Estado:", opciones_est, index=idx_est, key=f"sel_est_{idx}")
+                            
+                            nuevo_res = st.text_area("Resultados de la Investigación de Campo:", value=res_previo if res_previo != "nan" else "", key=f"txt_res_{idx}")
+                            soporte = st.file_uploader("Adjuntar Acta/Foto (Opcional):", type=["pdf", "jpg", "png"], key=f"file_vbc_{idx}")
+                            
+                            if st.form_submit_button("💾 Guardar Investigación", key=f"btn_vbc_{idx}"):
+                                if soporte:
+                                    os.makedirs(CARPETA_SOPORTES, exist_ok=True)
+                                    ext = soporte.name.split('.')[-1]
+                                    ruta_doc = os.path.join(CARPETA_SOPORTES, f"VBC_{idx}_{datetime.today().strftime('%Y%m%d')}.{ext}")
+                                    with open(ruta_doc, "wb") as f: f.write(soporte.getbuffer())
+                                    df_vbc.at[idx, "Ruta_Soporte_VBC"] = ruta_doc
+                                
+                                df_vbc.at[idx, "Estado_Verificacion"] = nuevo_est
+                                df_vbc.at[idx, "Resultado_Investigacion"] = nuevo_res
+                                guardar_datos(df_vbc, 'VBC_Rumores')
+                                registrar_log(f"Verificación VBC {idx} actualizada a: {nuevo_est}", "Vigilancia Comunitaria")
+                                
+                                st.session_state["mensaje_exito_temp"] = "✅ Investigación guardada correctamente."
+                                st.rerun()
         else:
-            st.info("No hay rumores comunitarios registrados.")
+            st.info("No hay rumores comunitarios activos.")
 
     with t_dash:
         if not df_vbc.empty:
             col_g1, col_g2 = st.columns(2)
             with col_g1:
                 st.markdown("#### Rumores por Municipio")
-                st.bar_chart(df_vbc["Municipio"].value_counts())
+                mun_count = df_vbc["Municipio"].value_counts()
+                st.bar_chart(mun_count)
             with col_g2:
-                st.markdown("#### Estado de Verificación")
-                st.bar_chart(df_vbc["Estado_Verificacion"].value_counts())
+                st.markdown("#### Estado de las Alertas")
+                est_count = df_vbc["Estado_Verificacion"].value_counts()
+                st.bar_chart(est_count)
         else:
             st.info("Sin datos para analizar.")
 
@@ -2296,7 +2361,7 @@ def vista_sivigila():
                         
                     top_evento = "N/A"
                     if col_evento and len(df_siv) > 0:
-                        top_evento = df_siv[col_evento].value_counts().index[0][:20] # Top 20 chars
+                        top_evento = str(df_siv[col_evento].value_counts().index[0])[:20] # Top 20 chars
                         
                     mortalidad = 0
                     col_def_kpi = [col for col in df_siv.columns if "fec_def" in col.lower()]
@@ -2943,6 +3008,35 @@ def vista_calidad_dato():
         except Exception as e:
             st.error(f"Error procesando el archivo: {e}")
 
+def limpiar_df_directorio(df_raw):
+    df = df_raw.copy()
+    col_str = ' '.join(df.columns.dropna().astype(str).str.upper().tolist())
+    if any(k in col_str for k in ['MUNICIPIO', 'NOMBRE', 'TELEFONO', 'CORREO', 'ENTIDAD', 'CARGO']):
+        pass
+    else:
+        header_idx = -1
+        for i in range(min(10, len(df))):
+            row_str = ' '.join(df.iloc[i].dropna().astype(str).str.upper().tolist())
+            if sum(k in row_str for k in ['MUNICIPIO', 'NOMBRE', 'TELEFONO', 'CORREO', 'ENTIDAD', 'CARGO', 'CELULAR', 'APELLIDO']) >= 2:
+                header_idx = i
+                break
+        if header_idx == -1:
+            for i in range(min(10, len(df))):
+                row_str = ' '.join(df.iloc[i].dropna().astype(str).str.upper().tolist())
+                if any(k in row_str for k in ['MUNICIPIO', 'NOMBRE', 'TELEFONO', 'CORREO', 'ENTIDAD', 'CARGO', 'CELULAR', 'APELLIDO']):
+                    header_idx = i
+                    break
+        if header_idx != -1:
+            df.columns = df.iloc[header_idx]
+            df = df.iloc[header_idx+1:].reset_index(drop=True)
+            
+    df.columns = [str(c).strip() for c in df.columns]
+    if 'nan' in df.columns:
+        df = df.loc[:, df.columns != 'nan']
+    df = df.dropna(axis=1, how='all')
+    df = df.dropna(how='all')
+    return df
+
 def vista_directorio():
     st.markdown("### 📞 Directorio de Red Institucional y Notificación Masiva")
     df_dir = cargar_datos('Directorio_Contactos')
@@ -2950,20 +3044,92 @@ def vista_directorio():
     
     with t_lista:
         st.markdown("#### 🔗 Directorio Central en la Nube")
-        st.link_button("🌐 Abrir Directorio Maestro Completo (Google Sheets)", URL_DIRECTORIO_ENTIDADES, use_container_width=True, type="primary")
-        st.caption("Usa este botón para editar el directorio principal hospedado en línea.")
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            st.link_button("🌐 Abrir Directorio Maestro para Editar", URL_DIRECTORIO_ENTIDADES, use_container_width=True, type="primary")
+        with col_btn2:
+            if st.button("🔄 Sincronizar Datos desde la Nube", use_container_width=True):
+                st.session_state.pop('dict_directorio_nube', None)
+        
         st.markdown("---")
         
-        st.markdown("#### 📋 Base de Datos Auxiliar de Contactos (Local)")
-        if not df_dir.empty:
-            st.dataframe(df_dir, use_container_width=True, hide_index=True)
-            st.markdown("#### 📧 Enviar Notificación Masiva a la Red")
-            correos_validos = [c for c in df_dir["Correo"] if "@" in str(c)]
-            if correos_validos:
-                lista_bcc = ",".join(correos_validos)
-                st.markdown(f'<a href="mailto:?bcc={lista_bcc}&subject=ALERTA EPIDEMIOLOGICA VSP SUCRE"><button style="padding:10px; background-color:#eab308; border:none; border-radius:5px; color:black; font-weight:bold;">✉️ Generar Correo a Todos los Actores ({len(correos_validos)} correos)</button></a>', unsafe_allow_html=True)
+        st.markdown("#### 📋 Base de Datos de Contactos (Sincronizada)")
+        
+        # Cargar desde Google Sheets dinámicamente
+        if 'dict_directorio_nube' not in st.session_state:
+            url_xlsx = "https://docs.google.com/spreadsheets/d/12OoDlbA8L3uaAv0ZZqzSU08nLx0lzUf_/export?format=xlsx"
+            try:
+                dict_dfs = pd.read_excel(url_xlsx, sheet_name=None)
+                for k, v in dict_dfs.items():
+                    dict_dfs[k] = limpiar_df_directorio(v)
+                st.session_state['dict_directorio_nube'] = dict_dfs
+            except Exception as e:
+                st.error(f"No se pudo cargar el directorio desde la nube. Detalle: {e}")
+                st.session_state['dict_directorio_nube'] = {"Local": df_dir}
+                
+        dict_nube = st.session_state['dict_directorio_nube']
+        
+        if dict_nube:
+            lista_hojas = list(dict_nube.keys())
+            
+            c1, c2, c3 = st.columns([1, 1, 2])
+            with c3:
+                busqueda_libre = st.text_input("🔍 Búsqueda Global (Todas las hojas):", placeholder="Ej: DLS, Nombre, Hospital")
+                
+            if busqueda_libre:
+                # Búsqueda Global
+                st.info(f"Buscando '{busqueda_libre}' en todas las bases de datos del Directorio...")
+                resultados = []
+                for hoja, df_h in dict_nube.items():
+                    df_temp = df_h.copy()
+                    df_temp.columns = [str(c).strip() for c in df_temp.columns]
+                    df_temp = df_temp.dropna(how='all')
+                    mask = df_temp.astype(str).apply(lambda x: x.str.contains(busqueda_libre, case=False, na=False)).any(axis=1)
+                    df_filtrado = df_temp[mask].copy()
+                    if not df_filtrado.empty:
+                        df_filtrado["CATEGORIA_ORIGEN"] = hoja
+                        resultados.append(df_filtrado)
+                
+                if resultados:
+                    st.success(f"✅ Se encontraron coincidencias en {len(resultados)} hojas del Directorio.")
+                    for df_r in resultados:
+                        origen = df_r["CATEGORIA_ORIGEN"].iloc[0]
+                        st.markdown(f"#### 📁 {origen}")
+                        df_view = df_r.drop(columns=["CATEGORIA_ORIGEN"])
+                        st.dataframe(df_view, use_container_width=True, hide_index=True)
+                else:
+                    st.warning("No se encontraron resultados en el Directorio Maestro.")
+            else:
+                # Vista Normal por Hoja o General
+                with c1:
+                    lista_hojas_ui = ["🗂️ TODAS LAS CATEGORÍAS (GENERAL)"] + lista_hojas
+                    hoja_sel = st.selectbox("📂 Seleccione Categoría:", lista_hojas_ui)
+                
+                if hoja_sel == "🗂️ TODAS LAS CATEGORÍAS (GENERAL)":
+                    for hoja, df_h in dict_nube.items():
+                        if not df_h.empty:
+                            st.markdown(f"#### 📁 {hoja}")
+                            st.dataframe(df_h, use_container_width=True, hide_index=True)
+                else:
+                    df_act = dict_nube[hoja_sel].copy()
+                    
+                    cols = df_act.columns.tolist()
+                    col_mun = next((c for c in cols if 'MUNICIPIO' in c.upper()), None)
+                    
+                    with c2:
+                        if col_mun:
+                            muns = sorted([str(m) for m in df_act[col_mun].dropna().unique()])
+                            filtro_mun = st.selectbox("📍 Filtrar Municipio:", ["Todos"] + muns)
+                        else:
+                            filtro_mun = "Todos"
+                            
+                    df_mostrar = df_act.copy()
+                    if col_mun and filtro_mun != "Todos":
+                        df_mostrar = df_mostrar[df_mostrar[col_mun].astype(str) == filtro_mun]
+                        
+                    st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
         else:
-            st.info("Directorio vacío.")
+            st.info("Directorio vacío o no se pudieron cargar las hojas.")
             
     with t_nuevo:
         with st.form("form_dir", clear_on_submit=True):
@@ -3040,7 +3206,7 @@ def vista_brotes_eri():
             sel_brote = st.selectbox("Seleccione el Brote a Gestionar:", opciones_b)
             if sel_brote:
                 idx_b = int(sel_brote.split(" - ")[0])
-                fila_b = df_brotes.iloc[idx_b]
+                fila_b = df_brotes.loc[idx_b]
                 
                 with st.expander("📝 Desplegar Equipo ERI", expanded=True):
                     eq_asig = st.text_area("Integrantes del Equipo de Respuesta Inmediata (ERI):", value=fila_b["Equipo_Asignado"])
@@ -3110,16 +3276,36 @@ def vista_tablero_problemas():
                     
     with t_tablero:
         if not df_prob.empty:
-            c_abierto, c_proceso, c_resuelto = st.columns(3)
+            st.markdown("#### 🗂️ Vista de Tickets Activos")
             
-            for idx, row in df_prob.iterrows():
+            # Filtros Kanban
+            col_f1, col_f2 = st.columns([1, 2])
+            with col_f1:
+                ocultar_resueltos = st.toggle("Ocultar tickets RESUELTOS", value=True)
+            with col_f2:
+                filtro_mun_prob = st.selectbox("Filtrar por Municipio:", ["Todos"] + LISTA_MUNICIPIOS[1:])
+            
+            df_mostrar = df_prob.copy()
+            if ocultar_resueltos:
+                df_mostrar = df_mostrar[~df_mostrar["Estado"].astype(str).str.contains("RESUELTO", na=False)]
+            if filtro_mun_prob != "Todos":
+                df_mostrar = df_mostrar[df_mostrar["Municipio"] == filtro_mun_prob]
+                
+            c_abierto, c_proceso, c_resuelto = st.columns(3)
+            c_abierto.markdown("<h5 style='text-align:center; color:#ef4444;'>🔴 ABIERTOS</h5>", unsafe_allow_html=True)
+            c_proceso.markdown("<h5 style='text-align:center; color:#eab308;'>🟡 EN PROCESO</h5>", unsafe_allow_html=True)
+            c_resuelto.markdown("<h5 style='text-align:center; color:#22c55e;'>🟢 RESUELTOS</h5>", unsafe_allow_html=True)
+            
+            for idx, row in df_mostrar.iterrows():
                 estado = str(row["Estado"])
                 tarjeta = f"""
-                <div style='background:rgba(30,41,59,0.7); padding:15px; border-radius:10px; border-left: 5px solid {"#ef4444" if "ABIERTO" in estado else "#eab308" if "PROCESO" in estado else "#22c55e"}; margin-bottom:10px;'>
-                    <small style='color:gray;'>Ticket #{idx} - {row['Municipio']}</small>
-                    <h5 style='margin-top:5px; margin-bottom:5px; color:#e2e8f0;'>{row['Categoria']}</h5>
-                    <p style='font-size:0.85em; color:#94a3b8;'>{row['Descripcion']}</p>
-                    <small><b>Resuelve:</b> {row['Responsable']}</small>
+                <div style='background:rgba(30,41,59,0.7); padding:15px; border-radius:10px; border-left: 5px solid {"#ef4444" if "ABIERTO" in estado else "#eab308" if "PROCESO" in estado else "#22c55e"}; margin-bottom:10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
+                    <small style='color:#cbd5e1; font-weight:bold;'>Ticket #{idx} - {row.get('Municipio', 'N/A')}</small>
+                    <h5 style='margin-top:5px; margin-bottom:5px; color:#f8fafc;'>{row.get('Categoría', row.get('Categoria', 'N/A'))}</h5>
+                    <p style='font-size:0.85em; color:#94a3b8; line-height: 1.4;'>{row.get('Descripción', row.get('Descripcion', 'N/A'))}</p>
+                    <div style='margin-top:10px; font-size:0.8em; color:#fbbf24; background:rgba(0,0,0,0.2); padding:5px; border-radius:5px;'>
+                        <b>👤 Resuelve:</b> {row.get('Responsable', 'N/A')}
+                    </div>
                 </div>
                 """
                 if "ABIERTO" in estado: c_abierto.markdown(tarjeta, unsafe_allow_html=True)
@@ -3127,22 +3313,27 @@ def vista_tablero_problemas():
                 else: c_resuelto.markdown(tarjeta, unsafe_allow_html=True)
                 
             st.markdown("---")
-            with st.expander("🔄 Actualizar o Resolver Ticket"):
-                opciones_p = [f"{idx} - Ticket #{idx} ({row['Municipio']} - {row['Categoria']})" for idx, row in df_prob.iterrows()]
-                sel_p = st.selectbox("Seleccione Ticket:", opciones_p)
-                if sel_p:
+            with st.expander("🔄 Actualizar o Resolver Ticket", expanded=False):
+                # Generamos opciones solo para los tickets mostrados o todos
+                opciones_p = [f"{idx} - Ticket #{idx} ({row.get('Municipio', '')} - {row.get('Categoría', row.get('Categoria', ''))})" for idx, row in df_prob.iterrows()]
+                sel_p = st.selectbox("Seleccione Ticket a Gestionar:", ["Seleccione..."] + opciones_p)
+                
+                if sel_p and sel_p != "Seleccione...":
                     idx_p = int(sel_p.split(" - ")[0])
-                    n_estado_p = st.selectbox("Nuevo Estado:", ["🔴 ABIERTO", "🟡 EN PROCESO", "🟢 RESUELTO"])
-                    n_resp_p = st.text_area("Respuesta o Gestión Realizada:", value=str(df_prob.iloc[idx_p]["Respuesta"]))
-                    if st.button("💾 Guardar Gestión"):
+                    estado_actual = str(df_prob.loc[idx_p]["Estado"])
+                    idx_estado_p = ["🔴 ABIERTO", "🟡 EN PROCESO", "🟢 RESUELTO"].index(estado_actual) if estado_actual in ["🔴 ABIERTO", "🟡 EN PROCESO", "🟢 RESUELTO"] else 0
+                    
+                    n_estado_p = st.selectbox("Nuevo Estado:", ["🔴 ABIERTO", "🟡 EN PROCESO", "🟢 RESUELTO"], index=idx_estado_p)
+                    n_resp_p = st.text_area("Respuesta o Gestión Realizada:", value=str(df_prob.loc[idx_p].get("Respuesta", "")))
+                    if st.button("💾 Guardar Gestión", type="primary"):
                         df_prob.at[idx_p, "Estado"] = n_estado_p
                         df_prob.at[idx_p, "Respuesta"] = n_resp_p
                         guardar_datos(df_prob, 'Tablero_Problemas')
                         registrar_log(f"Ticket #{idx_p} actualizado a {n_estado_p}", "Tablero Problemas")
-                        st.success("Ticket actualizado.")
+                        st.session_state["mensaje_exito_temp"] = f"Ticket #{idx_p} actualizado correctamente."
                         st.rerun()
         else:
-            st.info("El tablero está limpio. No hay problemas reportados.")
+            st.info("✅ El tablero está limpio. No hay problemas reportados en el sistema.")
 
 def vista_asistente_ia():
     st.markdown("### 🤖 Asistente Redactor VSP (Generador Inteligente)")
@@ -3817,7 +4008,6 @@ mapeo_vistas = {
     "📄 Actas e Informes": vista_actas_informes,
     "🚨 Alertas e Inventario": vista_alertas_inventario,
     "🔍 Filtros y Dashboard": vista_filtros_dashboard,
-    "🚨 Brotes y ERI": vista_brotes_eri,
     "🛑 Tablero de Problemas": vista_tablero_problemas,
     "🏘️ Vigilancia Comunitaria (VBC)": vista_vbc,
     "📈 Tableros SIVIGILA": vista_sivigila,

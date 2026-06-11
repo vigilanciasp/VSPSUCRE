@@ -1,0 +1,6 @@
+629: secciones_6 = ["🦠 Brotes y ERI", "🛑 Tablero de Problemas", "🤖 Asistente Redactor VSP", "🪦 Sala de Mortalidades"]
+2054:                 lista_todas_vistas_f = list(mapeo_vistas.keys()) if 'mapeo_vistas' in globals() else ["🏠 Inicio", "📝 Registrar Actividad", "🧑‍⚕️ Disponibilidad Semanal", "🤝 Compromisos Técnicos", "📨 Enlaces y Solicitudes HC", "📁 Actas e Informes", "🚨 Alertas e Inventario", "📊 Filtros y Dashboard", "🦠 Brotes y ERI", "🛑 Tablero de Problemas", "🏘️ Vigilancia Comunitaria (VBC)", "📊 Tableros SIVIGILA", "🛡️ Calidad del Dato", "📇 Directorio de Red", "🤖 Asistente Redactor VSP", "👑 Panel Maestro y Roles", "🕵️ Auditoría y Logs", "🪦 Sala de Mortalidades"]
+3175:                     registrar_log(f"Alerta de Brote Declarada: {b_patologia} en {b_mun}", "Brotes y ERI")
+3195:                         registrar_log(f"Equipo ERI asignado al brote {idx_b}", "Brotes y ERI")
+3210:                         registrar_log(f"Brote {idx_b} actualizado a estado {n_estado}", "Brotes y ERI")
+3990:     "🚨 Brotes y ERI": vista_brotes_eri,
