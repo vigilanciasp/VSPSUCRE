@@ -6,3 +6,4 @@ holidays
 plotly
 PyPDF2
 fpdf
+folium

@@ -272,13 +272,14 @@ def inicializar_db():
         'Brotes_ERI': ['Fecha_Alerta', 'Municipio', 'Patologia', 'Fuente', 'Descripcion', 'Equipo_Asignado', 'Estado', 'Ruta_ERI'],
         'Tablero_Problemas': ['Fecha_Reporte', 'Municipio', 'Categoria', 'Descripcion', 'Responsable', 'Estado', 'Respuesta'],
         'Auditoria_Logs': ['Fecha_Hora', 'Usuario', 'Accion', 'Modulo'],
-        'Consecutivos_Actas': ['Fecha', 'Tipo_Documento', 'Consecutivo', 'Asunto', 'Responsable'],
+        'Consecutivos_Actas': ['Fecha', 'Tipo_Documento', 'Consecutivo', 'Asunto', 'Responsable', 'Observaciones'],
         'Casos_Criticos': ['Fecha_Notificacion', 'Evento', 'Identificacion', 'Municipio', 'Fase', 'Dias_Mora'],
         'IPS_UPGD': ['Municipio', 'Nombre_IPS', 'Codigo_Sede', 'Reporto_Ultima_Semana', 'Fecha_Ultimo_Reporte'],
         'Boletines_Data': ['Semana', 'Municipio', 'Evento', 'Edad', 'Sexo', 'Casos'],
         'Muestras_Lab': ['Fecha_Envio', 'Paciente_Identificacion', 'Municipio', 'Tipo_Muestra', 'Evento_Sospechoso', 'Estado', 'Resultado', 'Dias_Espera'],
         'Riesgos_VSP': ['Fecha_Registro', 'Categoria', 'Descripcion', 'Municipio', 'Probabilidad', 'Impacto', 'Nivel_Riesgo', 'Responsable', 'Estado', 'Mitigacion'],
-        'Cumpleanos': ['Funcionario', 'Fecha_Nacimiento']
+        'Cumpleanos': ['Funcionario', 'Fecha_Nacimiento'],
+        'Sivigila_Notificaciones': ['Fecha_Notificacion', 'IPS', 'Evento', 'Municipio', 'Identificacion', 'Latitud', 'Longitud', 'Estado']
     }
     
     if not os.path.exists(ARCHIVO_DB):
@@ -319,7 +320,15 @@ def cargar_datos(hoja):
         df = pd.read_excel(ARCHIVO_DB, sheet_name=hoja)
         if hoja == 'Usuarios' and 'Permisos' not in df.columns:
             df['Permisos'] = "🏠 Inicio,📝 Registrar Actividad"
-        return df.fillna("").astype(str) if hoja in ['Disponibilidad', 'Compromisos', 'Actas', 'Alertas_Inventario', 'Historial_Enlaces', 'Usuarios', 'VBC_Rumores', 'Directorio_Contactos', 'Solicitudes_Externas', 'Solicitudes_Teams', 'Brotes_ERI', 'Tablero_Problemas', 'Auditoria_Logs', 'Riesgos_VSP', 'Cumpleanos'] else df.fillna("")
+        return df.fillna("").astype(str) if hoja in ['Disponibilidad', 'Compromisos', 'Actas', 'Alertas_Inventario', 'Historial_Enlaces', 'Usuarios', 'VBC_Rumores', 'Directorio_Contactos', 'Solicitudes_Externas', 'Solicitudes_Teams', 'Brotes_ERI', 'Tablero_Problemas', 'Auditoria_Logs', 'Riesgos_VSP', 'Cumpleanos', 'Sivigila_Notificaciones'] else df.fillna("")
+    except ValueError:
+        # Sheet not found
+        inicializar_db()
+        try:
+            df = pd.read_excel(ARCHIVO_DB, sheet_name=hoja)
+            return df.fillna("").astype(str) if hoja in ['Disponibilidad', 'Compromisos', 'Actas', 'Alertas_Inventario', 'Historial_Enlaces', 'Usuarios', 'VBC_Rumores', 'Directorio_Contactos', 'Solicitudes_Externas', 'Solicitudes_Teams', 'Brotes_ERI', 'Tablero_Problemas', 'Auditoria_Logs', 'Riesgos_VSP', 'Cumpleanos', 'Sivigila_Notificaciones'] else df.fillna("")
+        except:
+            return pd.DataFrame()
     except Exception as e:
         st.error(f"Error al leer la pestaña {hoja}: {e}")
         return pd.DataFrame()
@@ -593,7 +602,7 @@ for idx, sec in enumerate(secciones_2):
                 st.session_state["seccion_actual"] = sec; st.rerun()
 
 # Tercera fila para los módulos epidemiológicos y laboratorio
-secciones_3 = ["🏘️ Vigilancia Comunitaria (VBC)", "📈 Tableros SIVIGILA", "🛡️ Calidad del Dato", "📞 Directorio de Red", "🧪 Muestras de Laboratorio"]
+secciones_3 = ["🏘️ Vigilancia Comunitaria (VBC)", "🚨 SIVIGILA Territorial (Comando)", "📈 Tableros SIVIGILA", "🛡️ Calidad del Dato", "📞 Directorio de Red"]
 nav_cols_3 = st.columns(len(secciones_3))
 for idx, sec in enumerate(secciones_3):
     with nav_cols_3[idx]:
@@ -615,7 +624,7 @@ for idx, sec in enumerate(secciones_4):
                 st.session_state["seccion_actual"] = sec; st.rerun()
 
 # Quinta fila para panel de control y seguridad
-secciones_5 = ["⚠️ Gestión del Riesgo", "⚙️ Panel Maestro y Roles", "🕵️ Auditoría y Logs"]
+secciones_5 = ["⚠️ Gestión del Riesgo", "🧪 Muestras de Laboratorio", "⚙️ Panel Maestro y Roles", "🕵️ Auditoría y Logs"]
 nav_cols_5 = st.columns(len(secciones_5))
 for idx, sec in enumerate(secciones_5):
     with nav_cols_5[idx]:
@@ -1716,6 +1725,7 @@ def vista_actas_informes():
         consecutivo_final = st.text_input(label_consec, value=consecutivo_sugerido, disabled=not es_admin)
         asunto_consecutivo = st.text_input("Asunto o Tema Principal del Documento:")
         responsable_consecutivo = st.selectbox("Responsable / Elabora:", LISTA_RESPONSABLES, key="consec_resp")
+        observacion_consecutivo = st.text_area("Observaciones adicionales (Opcional):", placeholder="Ej: El evento se realizó con anterioridad y se genera acta retrospectiva.")
         
         if st.button("🎯 Generar y Reservar Nuevo Consecutivo", use_container_width=True, type="primary"):
             if "Seleccione..." in responsable_consecutivo or asunto_consecutivo.strip() == "" or consecutivo_final.strip() == "":
@@ -1726,7 +1736,8 @@ def vista_actas_informes():
                     "Tipo_Documento": tipo_doc_consecutivo,
                     "Consecutivo": consecutivo_final.strip().upper(),
                     "Asunto": asunto_consecutivo.upper(),
-                    "Responsable": responsable_consecutivo
+                    "Responsable": responsable_consecutivo,
+                    "Observaciones": observacion_consecutivo.strip()
                 }])
                 
                 df_consec = pd.concat([df_consec, nuevo_consec], ignore_index=True)
@@ -1738,7 +1749,18 @@ def vista_actas_informes():
         st.markdown("---")
         st.markdown("#### 📋 Historial de Consecutivos Asignados")
         if not df_consec.empty:
-            st.dataframe(df_consec.sort_values("Fecha", ascending=False), use_container_width=True, hide_index=True)
+            tipos_existentes = df_consec['Tipo_Documento'].unique().tolist()
+            if "Todos" not in tipos_existentes:
+                tipos_existentes.insert(0, "Todos")
+            
+            tabs_historial = st.tabs(tipos_existentes)
+            for i, tipo in enumerate(tipos_existentes):
+                with tabs_historial[i]:
+                    if tipo == "Todos":
+                        df_mostrar = df_consec
+                    else:
+                        df_mostrar = df_consec[df_consec['Tipo_Documento'] == tipo]
+                    st.dataframe(df_mostrar.sort_values("Fecha", ascending=False), use_container_width=True, hide_index=True)
             
             if st.session_state.get("rol_conectado") == "Administrador Total":
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -2270,6 +2292,128 @@ def generar_pdf_boletin(df, stats_dict):
         pdf_bytes = f.read()
     os.remove(temp_path)
     return pdf_bytes
+
+def vista_sivigila_territorial():
+    st.markdown("<h2 class='main-title'>🚨 Centro de Comando: SIVIGILA Territorial</h2>", unsafe_allow_html=True)
+    st.markdown("<p class='sub-title'>Captura en Tiempo Real, Alertas de Brotes y Cercos Epidemiológicos.</p>", unsafe_allow_html=True)
+    
+    df_notificaciones = cargar_datos('Sivigila_Notificaciones')
+    
+    t_captura, t_alertas, t_cerco = st.tabs(["📝 Captura Rápida (IPS)", "⚠️ Alertas Tempranas", "🗺️ Cercos Epidemiológicos (Geofencing)"])
+    
+    with t_captura:
+        st.markdown("### Reporte Inmediato de Evento de Interés en Salud Pública")
+        with st.form("form_sivigila_rapida", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            c_fecha = col1.date_input("Fecha de Notificación:", value=datetime.today())
+            c_ips = col2.text_input("IPS / Entidad Notificadora:", placeholder="Ej. ESE Hospital San Francisco")
+            
+            col3, col4 = st.columns(2)
+            c_evento = col3.selectbox("Evento Priorizado:", ["Dengue", "Infección Respiratoria Aguda (IRA)", "Enfermedad Diarreica Aguda (EDA)", "Mortalidad Perinatal", "Mortalidad Materna", "Intoxicación Masiva", "Otro"])
+            c_mun = col4.selectbox("Municipio de Ocurrencia:", LISTA_MUNICIPIOS)
+            
+            c_id = st.text_input("Identificación del Paciente (Opcional/Oculto en reportes):")
+            
+            st.markdown("#### Georreferenciación Exacta (Para Cercos)")
+            col5, col6 = st.columns(2)
+            c_lat = col5.text_input("Latitud (Ej. 9.3047):", value="")
+            c_lon = col6.text_input("Longitud (Ej. -75.3977):", value="")
+            
+            btn_reportar = st.form_submit_button("🚨 Enviar Notificación Urgente al SAR", type="primary")
+            
+            if btn_reportar and c_ips.strip() != "":
+                nueva_notif = pd.DataFrame([{
+                    "Fecha_Notificacion": c_fecha.strftime("%Y-%m-%d"),
+                    "IPS": c_ips,
+                    "Evento": c_evento,
+                    "Municipio": c_mun,
+                    "Identificacion": c_id,
+                    "Latitud": c_lat,
+                    "Longitud": c_lon,
+                    "Estado": "Reportado"
+                }])
+                guardar_datos(pd.concat([df_notificaciones, nueva_notif], ignore_index=True), 'Sivigila_Notificaciones')
+                st.session_state["mensaje_exito_temp"] = f"✅ Evento de {c_evento} reportado al Centro de Comando departamental."
+                st.rerun()
+
+    with t_alertas:
+        st.markdown("### Algoritmo de Detección de Anomalías")
+        if df_notificaciones.empty:
+            st.info("Aún no hay notificaciones en la base de datos de tiempo real.")
+        else:
+            # Calcular casos de los últimos 7 días
+            df_notificaciones["Fecha_Notificacion"] = pd.to_datetime(df_notificaciones["Fecha_Notificacion"], errors='coerce')
+            hace_7_dias = pd.Timestamp.now().normalize() - pd.Timedelta(days=7)
+            df_recientes = df_notificaciones[df_notificaciones["Fecha_Notificacion"] >= hace_7_dias]
+            
+            if df_recientes.empty:
+                st.success("✅ No se han detectado eventos en los últimos 7 días. Situación bajo control.")
+            else:
+                conteo_alertas = df_recientes.groupby(["Municipio", "Evento"]).size().reset_index(name="Casos_Ultimos_7_Dias")
+                
+                # Umbral estático demostrativo (Ej. más de 3 casos en 7 días = Brote sospechoso)
+                UMBRAL_BROTE = 3
+                
+                brotes_detectados = conteo_alertas[conteo_alertas["Casos_Ultimos_7_Dias"] >= UMBRAL_BROTE]
+                
+                if not brotes_detectados.empty:
+                    st.error(f"🚨 **¡ALERTA EPIDEMIOLÓGICA!** Se han detectado picos inusuales en {len(brotes_detectados)} zonas.")
+                    for _, brote in brotes_detectados.iterrows():
+                        st.markdown(f"🔴 **{brote['Municipio']}** reporta **{brote['Casos_Ultimos_7_Dias']} casos** de **{brote['Evento']}** en la última semana. *Se recomienda activar Equipo de Respuesta Inmediata (ERI).*")
+                else:
+                    st.success("✅ Los casos recientes están por debajo del umbral de alerta de brotes.")
+                
+                st.markdown("#### Histórico Reciente")
+                st.dataframe(df_recientes[["Fecha_Notificacion", "Municipio", "Evento", "IPS"]].sort_values(by="Fecha_Notificacion", ascending=False), use_container_width=True, hide_index=True)
+
+    with t_cerco:
+        st.markdown("### 🗺️ Geofencing y Cercos Epidemiológicos")
+        st.caption("Traza un radio de seguridad alrededor de los focos de infección para programar visitas de bloqueo entomológico o búsqueda activa comunitaria (BAC).")
+        
+        df_geo = df_notificaciones[df_notificaciones["Latitud"].astype(str).str.strip() != ""]
+        df_geo = df_geo[df_geo["Longitud"].astype(str).str.strip() != ""]
+        
+        if df_geo.empty:
+            st.info("No hay casos con coordenadas exactas (Lat/Lon) registradas para dibujar el mapa.")
+        else:
+            try:
+                import folium
+                # Centro del mapa basado en el último caso
+                lat_centro = float(df_geo.iloc[-1]["Latitud"])
+                lon_centro = float(df_geo.iloc[-1]["Longitud"])
+                
+                m = folium.Map(location=[lat_centro, lon_centro], zoom_start=14, tiles="CartoDB positron")
+                
+                radio_cerco = st.slider("📏 Radio del Cerco Epidemiológico (Metros):", min_value=100, max_value=2000, value=400, step=100)
+                
+                for _, row in df_geo.iterrows():
+                    try:
+                        lat_val = float(row["Latitud"])
+                        lon_val = float(row["Longitud"])
+                        evt = row["Evento"]
+                        color_marcador = "red" if "Dengue" in evt else "orange" if "IRA" in evt else "blue"
+                        
+                        # Agregar Marcador
+                        folium.Marker(
+                            location=[lat_val, lon_val],
+                            popup=f"{evt} - {row['Municipio']}",
+                            icon=folium.Icon(color=color_marcador, icon="info-sign")
+                        ).add_to(m)
+                        
+                        # Dibujar Cerco (Círculo)
+                        folium.Circle(
+                            location=[lat_val, lon_val],
+                            radius=radio_cerco,
+                            color=color_marcador,
+                            fill=True,
+                            fill_opacity=0.2,
+                            tooltip=f"Cerco de {radio_cerco}m"
+                        ).add_to(m)
+                    except: pass
+                
+                st.components.v1.html(m._repr_html_(), height=500)
+            except Exception as e:
+                st.warning(f"No se pudo cargar el módulo de mapas. Error: {e}")
 
 def vista_sivigila():
     st.markdown("### 📊 Tableros Epidemiológicos y SIVIGILA Pro")
@@ -4010,6 +4154,7 @@ mapeo_vistas = {
     "🔍 Filtros y Dashboard": vista_filtros_dashboard,
     "🛑 Tablero de Problemas": vista_tablero_problemas,
     "🏘️ Vigilancia Comunitaria (VBC)": vista_vbc,
+    "🚨 SIVIGILA Territorial (Comando)": vista_sivigila_territorial,
     "📈 Tableros SIVIGILA": vista_sivigila,
     "🛡️ Calidad del Dato": vista_calidad_dato,
     "📞 Directorio de Red": vista_directorio,
