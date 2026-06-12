@@ -602,7 +602,7 @@ for idx, sec in enumerate(secciones_2):
                 st.session_state["seccion_actual"] = sec; st.rerun()
 
 # Tercera fila para los módulos epidemiológicos y laboratorio
-secciones_3 = ["🏘️ Vigilancia Comunitaria (VBC)", "🚨 SIVIGILA Territorial (Comando)", "📈 Tableros SIVIGILA", "🛡️ Calidad del Dato", "📞 Directorio de Red"]
+secciones_3 = ["🏘️ Vigilancia Comunitaria (VBC)", "🚨 SIVIGILA Territorial (Comando)", "📈 Tableros SIVIGILA", "📞 Directorio de Red"]
 nav_cols_3 = st.columns(len(secciones_3))
 for idx, sec in enumerate(secciones_3):
     with nav_cols_3[idx]:
@@ -613,7 +613,7 @@ for idx, sec in enumerate(secciones_3):
                 st.session_state["seccion_actual"] = sec; st.rerun()
 
 # Cuarta fila para módulos avanzados VSP
-secciones_4 = ["🗺️ Georreferenciación", "📌 Kanban Críticos", "🏥 Silencio Epi", "🤖 Asistente Protocolos", "📊 Tablero Avanzado"]
+secciones_4 = ["📌 Kanban Críticos", "🏥 Silencio Epi", "🤖 Asistente Protocolos", "📊 Tablero Avanzado"]
 nav_cols_4 = st.columns(len(secciones_4))
 for idx, sec in enumerate(secciones_4):
     with nav_cols_4[idx]:
@@ -624,7 +624,7 @@ for idx, sec in enumerate(secciones_4):
                 st.session_state["seccion_actual"] = sec; st.rerun()
 
 # Quinta fila para panel de control y seguridad
-secciones_5 = ["⚠️ Gestión del Riesgo", "🧪 Muestras de Laboratorio", "⚙️ Panel Maestro y Roles", "🕵️ Auditoría y Logs"]
+secciones_5 = ["⚠️ Gestión del Riesgo", "⚙️ Panel Maestro y Roles", "🕵️ Auditoría y Logs"]
 nav_cols_5 = st.columns(len(secciones_5))
 for idx, sec in enumerate(secciones_5):
     with nav_cols_5[idx]:
@@ -635,7 +635,7 @@ for idx, sec in enumerate(secciones_5):
                 st.session_state["seccion_actual"] = sec; st.rerun()
 
 # Sexta fila para módulos misceláneos
-secciones_6 = ["🛑 Tablero de Problemas", "🤖 Asistente Redactor VSP", "🪦 Sala de Mortalidades"]
+secciones_6 = ["🛑 Tablero de Problemas", "🪦 Sala de Mortalidades"]
 if st.session_state.get("rol_conectado") == "Administrador Total":
     secciones_6.append("🎂 Gestionar Cumpleaños")
 nav_cols_6 = st.columns(len(secciones_6))
@@ -759,7 +759,7 @@ def vista_inicio():
     c2.markdown(f"<div class='metric-card' style='border-left: 5px solid #f97316;'>🚨 <b>Casos Críticos</b><h2 style='color:#f97316; margin:0;'>{casos_mora}</h2><small>En mora > 7 días</small></div>", unsafe_allow_html=True)
     c3.markdown(f"<div class='metric-card' style='border-left: 5px solid #b91c1c;'>🔴 <b>Riesgos Ext.</b><h2 style='color:#b91c1c; margin:0;'>{riesgos_extremos}</h2><small>Amenazas críticas</small></div>", unsafe_allow_html=True)
     c4.markdown(f"<div class='metric-card' style='border-left: 5px solid #10b981;'>✅ <b>Gestión Téc.</b><h2 style='color:#10b981; margin:0;'>{porc_cumplimiento}%</h2><small>Compromisos listos</small></div>", unsafe_allow_html=True)
-    c5.markdown(f"<div class='metric-card' style='border-left: 5px solid #3b82f6;'>🧪 <b>Laboratorio</b><h2 style='color:#3b82f6; margin:0;'>{muestras_mora}</h2><small>Muestras retrasadas</small></div>", unsafe_allow_html=True)
+    c5.markdown(f"<div class='metric-card' style='border-left: 5px solid #3b82f6;'>🤝 <b>Compromisos</b><h2 style='color:#3b82f6; margin:0;'>{comp_cumplidos} <span style='font-size:1rem; color:#94a3b8;'>/ {comp_totales}</span></h2><small>{porc_cumplimiento}% completado</small></div>", unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -809,22 +809,65 @@ def vista_inicio():
             
     st.markdown("---")
 
+
+    # WIDGET DISPONIBILIDAD
+    st.markdown("### 🛡️ Turnos de Disponibilidad Semanal")
+    with st.expander("Ver integrantes de turno (Actual y Próximos)", expanded=False):
+        df_d_widget = cargar_datos('Disponibilidad')
+        if not df_d_widget.empty:
+            semanas_widget = []
+            for m in range(1, 13): semanas_widget.extend(generar_semanas_del_mes(datetime.today().year, m))
+            semanas_widget = sorted(list(set(semanas_widget)), key=lambda x: x[0])
+            sem_actual_w = obtener_semana_epidemiologica(datetime.today())
+            opciones_fw = [f"S.E. {w[2]} (Del {w[0].strftime('%d/%m/%Y')} al {w[1].strftime('%d/%m/%Y')})" for w in semanas_widget]
+            idx_w = next((i for i, w in enumerate(semanas_widget) if w[2] == sem_actual_w), 0)
+            
+            semana_consulta_w = st.selectbox("Seleccione la semana:", opciones_fw, index=idx_w, key="wid_disp")
+            if semana_consulta_w:
+                sem_sel_w = semanas_widget[opciones_fw.index(semana_consulta_w)]
+                reg_sel_w = df_d_widget[df_d_widget["Semana_Inicio"] == sem_sel_w[0].strftime("%Y-%m-%d")]
+                if not reg_sel_w.empty:
+                    int_w = [i for i in str(reg_sel_w.iloc[0]["Integrantes"]).split(";") if i.strip()]
+                    car_w = [c for c in str(reg_sel_w.iloc[0]["Cargos"]).split(";") if c.strip()]
+                    sup_w = [s for s in str(reg_sel_w.iloc[0].get("Suplentes", "")).split(";")]
+                    obs_w = [o for o in str(reg_sel_w.iloc[0].get("Observaciones", "")).split(";")]
+                    
+                    if int_w:
+                        cols_w = st.columns(len(int_w))
+                        for i, nombre in enumerate(int_w): 
+                            cargo = car_w[i] if i < len(car_w) else 'Asignado'
+                            suplente = sup_w[i] if i < len(sup_w) and sup_w[i].strip() not in ["", "Ninguno", "nan"] else None
+                            obs = obs_w[i] if i < len(obs_w) and obs_w[i].strip() and obs_w[i].strip() != "nan" else None
+                            
+                            texto_mostrar = f"👤 **{nombre}**\n\n💼 *{cargo}*"
+                            if suplente: texto_mostrar = f"~~👤 {nombre}~~ (Ausente)\n\n🔄 **SUPLENTE: {suplente}**\n\n💼 *{cargo}*"
+                            if obs: texto_mostrar += f"\n\n📝 *Obs: {obs}*"
+                            
+                            if suplente: cols_w[i].warning(texto_mostrar)
+                            else: cols_w[i].info(texto_mostrar)
+                else:
+                    st.info("No hay turnos asignados para esta semana.")
+        else:
+            st.info("No hay programación de disponibilidad en el sistema.")
+    st.markdown("---")
+
     st.markdown("### 🚀 Accesos Directos de la Red")
+
     col_ad1, col_ad2, col_ad3, col_ad4, col_ad5 = st.columns(5)
     with col_ad1:
         st.link_button("🌐 Portal SIVIGILA 4.0", ENLACE_PORTAL_WEB, use_container_width=True)
     with col_ad2:
         st.link_button("📞 Directorio Externo (Drive)", URL_DIRECTORIO_ENTIDADES, use_container_width=True)
     with col_ad3:
-        if st.button("🎥 Solicitudes Virtuales (Teams/Forms)", use_container_width=True):
-            st.session_state["seccion_actual"] = "🛠️ Enlaces y Solicitudes HC"
-            st.rerun()
-    with col_ad4:
         if st.button("🚨 Alertas y Notificaciones", use_container_width=True):
             st.session_state["seccion_actual"] = "🚨 Alertas e Inventario"
             st.rerun()
-    with col_ad5:
+    with col_ad4:
         st.link_button("🔢 Consecutivo de Actas (Drive)", URL_CONSECUTIVOS, use_container_width=True)
+    with col_ad5:
+        if st.button("📊 Tablero Gerencial (Compromisos)", use_container_width=True):
+            st.session_state["seccion_actual"] = "📊 Tablero Gerencial"
+            st.rerun()
         
     col_ext1, col_ext2, col_ext3 = st.columns([2, 2, 2])
     with col_ext1:
@@ -921,27 +964,6 @@ def vista_inicio():
         if "eventClick" in interaccion_cal: st.session_state["fecha_seleccionada"] = interaccion_cal["eventClick"]["event"]["start"].split("T")[0]
         elif "dateClick" in interaccion_cal: st.session_state["fecha_seleccionada"] = interaccion_cal["dateClick"]["date"].split("T")[0]
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    with st.expander("🛡️ Ver Equipo de Disponibilidad de la Semana Actual", expanded=False):
-        lunes = hoy - timedelta(days=hoy.weekday())
-        df_d = cargar_datos('Disponibilidad')
-        reg_sem = df_d[df_d["Semana_Inicio"] == lunes.strftime("%Y-%m-%d")] if not df_d.empty else pd.DataFrame()
-        
-        if not reg_sem.empty:
-            st.markdown("**🔹 Vigilancia (Sala de Análisis):**")
-            integrantes = [i for i in str(reg_sem.iloc[0]["Integrantes"]).split(";") if i.strip()]
-            cargos = [c for c in str(reg_sem.iloc[0]["Cargos"]).split(";") if c.strip()]
-            cols_disp = st.columns(len(integrantes))
-            for i, nombre in enumerate(integrantes):
-                cols_disp[i].info(f"👤 **{nombre}** \n*{cargos[i] if i < len(cargos) else 'Asignado'}*")
-            lab_resp = str(reg_sem.iloc[0]["Laboratorio_Responsable"]).strip()
-            lab_cargo = str(reg_sem.iloc[0]["Laboratorio_Cargo"]).strip()
-            if lab_resp and lab_resp not in ["nan", ""]:
-                st.markdown("**🔬 Laboratorio de Salud Pública:**")
-                st.success(f"🧫 **{lab_resp}** \n*{lab_cargo if lab_cargo else 'Apoyo Analítico'}*")
-        else: 
-            st.warning("⚠️ Sin equipo de turno asignado para esta semana.")
-
     st.markdown("---")
     c_tit_abajo, c_btn_exp = st.columns([3, 1])
     c_tit_abajo.subheader(f"🔍 Agenda Operativa del Día: {st.session_state['fecha_seleccionada']}")
@@ -1024,7 +1046,6 @@ def vista_disponibilidad_semanal():
 
     df_d = cargar_datos('Disponibilidad')
     
-    # Restringir pestañas de configuración a los roles que no son administradores totales
     if st.session_state["rol_conectado"] == "Administrador Total" or "🛡️ Disponibilidad Semanal" in st.session_state.get("permisos_conectado", []):
         tab_cons, tab_adm, tab_cal = st.tabs(["🔍 Consultar Planificación de Turnos", "🔐 Panel de Configuración", "📅 Calendario Visual"])
     else:
@@ -1047,10 +1068,23 @@ def vista_disponibilidad_semanal():
                 st.markdown(f"#### 🛡️ Equipo Asignado para la **S.E. {sem_sel[2]}**")
                 integrantes = [i for i in str(reg_sem_sel.iloc[0]["Integrantes"]).split(";") if i.strip()]
                 cargos = [c for c in str(reg_sem_sel.iloc[0]["Cargos"]).split(";") if c.strip()]
+                suplentes = [s for s in str(reg_sem_sel.iloc[0].get("Suplentes", "")).split(";")]
+                observaciones = [o for o in str(reg_sem_sel.iloc[0].get("Observaciones", "")).split(";")]
+
                 if integrantes:
                     cols = st.columns(len(integrantes))
                     for i, nombre in enumerate(integrantes): 
-                        cols[i].info(f"👤 **{nombre}**\n\n💼 *{cargos[i] if i < len(cargos) else 'Asignado'}*")
+                        cargo = cargos[i] if i < len(cargos) else 'Asignado'
+                        suplente = suplentes[i] if i < len(suplentes) and suplentes[i].strip() not in ["", "Ninguno", "nan"] else None
+                        obs = observaciones[i] if i < len(observaciones) and observaciones[i].strip() and observaciones[i].strip() != "nan" else None
+                        
+                        texto_mostrar = f"👤 **{nombre}**\n\n💼 *{cargo}*"
+                        if suplente: texto_mostrar = f"~~👤 {nombre}~~ (Ausente)\n\n🔄 **SUPLENTE: {suplente}**\n\n💼 *{cargo}*"
+                        if obs: texto_mostrar += f"\n\n📝 *Obs: {obs}*"
+                        
+                        if suplente: cols[i].warning(texto_mostrar)
+                        else: cols[i].info(texto_mostrar)
+                        
                 lab_resp, lab_cargo = str(reg_sem_sel.iloc[0]["Laboratorio_Responsable"]).strip(), str(reg_sem_sel.iloc[0]["Laboratorio_Cargo"]).strip()
                 if lab_resp and lab_resp not in ["nan", ""]:
                     st.markdown("**🔬 Laboratorio de Salud Pública (LSP):**")
@@ -1062,36 +1096,59 @@ def vista_disponibilidad_semanal():
         with tab_adm:
             semana_registro = st.selectbox("Semana epidemiológica a estructurar:", opciones_futuras, index=index_actual, key="reg_sem_combo")
             lunes_reg_str = semanas_lista[opciones_futuras.index(semana_registro)][0].strftime("%Y-%m-%d")
-            lista_pre_integrantes, lista_pre_cargos, val_pre_lab_nombre, val_pre_lab_cargo = [], [], "", "Coordinador de Enlace LSP"
+            lista_pre_integrantes, lista_pre_cargos, lista_pre_suplentes, lista_pre_obs = [], [], [], []
+            val_pre_lab_nombre, val_pre_lab_cargo = "", "Coordinador de Enlace LSP"
             
             if not df_d.empty:
                 reg_existente = df_d[df_d["Semana_Inicio"] == lunes_reg_str]
                 if not reg_existente.empty:
                     lista_pre_integrantes = [i.strip() for i in str(reg_existente.iloc[0]["Integrantes"]).split(";") if i.strip()]
                     lista_pre_cargos = [c.strip() for c in str(reg_existente.iloc[0]["Cargos"]).split(";") if c.strip()]
-                    val_pre_lab_nombre, val_pre_lab_cargo = str(reg_existente.iloc[0]["Laboratorio_Responsable"]), str(reg_existente.iloc[0]["Laboratorio_Cargo"])
+                    lista_pre_suplentes = [s.strip() for s in str(reg_existente.iloc[0].get("Suplentes", "")).split(";")]
+                    lista_pre_obs = [o.strip() for o in str(reg_existente.iloc[0].get("Observaciones", "")).split(";")]
+                    val_pre_lab_nombre = str(reg_existente.iloc[0]["Laboratorio_Responsable"])
+                    val_pre_lab_cargo = str(reg_existente.iloc[0]["Laboratorio_Cargo"])
 
             num_integrantes = st.number_input("¿Cuántos integrantes asignará para Vigilancia? (Máx 9):", min_value=1, max_value=9, value=int(len(lista_pre_integrantes) if lista_pre_integrantes else 2))
-            int_nombres, int_cargos = [], []
-            cols_inputs = st.columns(3)
-            for x in range(int(num_integrantes)):
-                with cols_inputs[x % 3]:
-                    indice_previo = LISTA_RESPONSABLES.index(lista_pre_integrantes[x]) if x < len(lista_pre_integrantes) and lista_pre_integrantes[x] in LISTA_RESPONSABLES else 0
-                    nom = st.selectbox(f"Funcionario {x+1}:", LISTA_RESPONSABLES, index=indice_previo, key=f"f_p_{x}")
-                    car = st.text_input(f"Cargo / Rol {x+1}:", value=lista_pre_cargos[x] if x < len(lista_pre_cargos) else "Profesional Universitario VSP", key=f"c_p_{x}")
-                    if nom != "Seleccione...": 
-                        int_nombres.append(nom); int_cargos.append(car)
+            int_nombres, int_cargos, int_suplentes, int_obs = [], [], [], []
             
+            for x in range(int(num_integrantes)):
+                st.markdown(f"**Funcionario {x+1}**")
+                c1, c2, c3, c4 = st.columns(4)
+                
+                indice_previo = LISTA_RESPONSABLES.index(lista_pre_integrantes[x]) if x < len(lista_pre_integrantes) and lista_pre_integrantes[x] in LISTA_RESPONSABLES else 0
+                nom = c1.selectbox("Principal:", LISTA_RESPONSABLES, index=indice_previo, key=f"f_p_{x}")
+                car = c2.text_input("Cargo / Rol:", value=lista_pre_cargos[x] if x < len(lista_pre_cargos) else "Profesional Universitario VSP", key=f"c_p_{x}")
+                
+                opciones_sup = ["Ninguno"] + [r for r in LISTA_RESPONSABLES if r != "Seleccione..."]
+                sup_prev = lista_pre_suplentes[x] if x < len(lista_pre_suplentes) and lista_pre_suplentes[x] in opciones_sup else "Ninguno"
+                sup = c3.selectbox("Suplente (Opcional):", opciones_sup, index=opciones_sup.index(sup_prev), key=f"s_p_{x}")
+                
+                obs_prev = lista_pre_obs[x] if x < len(lista_pre_obs) and lista_pre_obs[x] != "nan" else ""
+                obs = c4.text_input("Observación/Motivo:", value=obs_prev, key=f"o_p_{x}")
+                
+                if nom != "Seleccione...": 
+                    int_nombres.append(nom); int_cargos.append(car); int_suplentes.append(sup); int_obs.append(obs)
+            
+            st.markdown("---")
             txt_lab_nom = st.text_input("Responsable de Laboratorio de Salud Pública:", value=val_pre_lab_nombre)
             txt_lab_car = st.text_input("Cargo / Rol de Laboratorio:", value=val_pre_lab_cargo)
             
-            if st.button("💾 Guardar Estructura de Turno"):
+            if st.button("💾 Guardar Estructura de Turno", type="primary"):
                 if len(int_nombres) != len(set(int_nombres)): 
-                    st.error("🚨 Asignación Inválida: No se puede registrar al mismo funcionario más de una vez en el mismo equipo.")
+                    st.error("🚨 Asignación Inválida: No se puede registrar al mismo funcionario más de una vez como principal en el mismo equipo.")
                 else:
                     if not df_d.empty: 
                         df_d = df_d[df_d["Semana_Inicio"] != lunes_reg_str]
-                    nuevo_turno = pd.DataFrame([{"Semana_Inicio": lunes_reg_str, "Integrantes": ";".join(int_nombres), "Cargos": ";".join(int_cargos), "Laboratorio_Responsable": txt_lab_nom.strip(), "Laboratorio_Cargo": txt_lab_car.strip()}])
+                    nuevo_turno = pd.DataFrame([{
+                        "Semana_Inicio": lunes_reg_str, 
+                        "Integrantes": ";".join(int_nombres), 
+                        "Cargos": ";".join(int_cargos), 
+                        "Suplentes": ";".join(int_suplentes),
+                        "Observaciones": ";".join(int_obs),
+                        "Laboratorio_Responsable": txt_lab_nom.strip(), 
+                        "Laboratorio_Cargo": txt_lab_car.strip()
+                    }])
                     guardar_datos(pd.concat([df_d, nuevo_turno], ignore_index=True), 'Disponibilidad')
                     st.session_state["mensaje_exito_temp"] = "🎉 ¡Turno epidemiológico publicado exitosamente!"
                     st.rerun()
@@ -1102,7 +1159,6 @@ def vista_disponibilidad_semanal():
         df_eventos_cal = cargar_datos('Eventos')
         try:
             from streamlit_calendar import calendar
-            
             eventos_lista = []
             if not df_eventos_cal.empty:
                 for idx, row in df_eventos_cal.iterrows():
@@ -1110,23 +1166,17 @@ def vista_disponibilidad_semanal():
                     if "Comité" in row["Tipo de Evento"] or "Brote" in row["Tipo de Evento"]: color = "#ef4444"
                     elif "BAI" in row["Tipo de Evento"]: color = "#eab308"
                     elif "Capacitación" in row["Tipo de Evento"]: color = "#10b981"
-                    
                     try:
                         if pd.api.types.is_datetime64_any_dtype(row['Fecha']):
                             fecha_str = row['Fecha'].strftime('%Y-%m-%d')
                         else:
                             fecha_str = str(row['Fecha']).split(" ")[0]
-                            
-                        # Format times to HH:MM:SS if needed
                         h_inicio = str(row['Hora Inicio']).strip()
                         if len(h_inicio) == 5: h_inicio += ":00"
-                        
                         h_fin = str(row['Hora Fin']).strip()
                         if len(h_fin) == 5: h_fin += ":00"
-                        
                         start_time = f"{fecha_str}T{h_inicio}"
                         end_time = f"{fecha_str}T{h_fin}"
-                        
                         eventos_lista.append({
                             "title": f"{row['Tipo de Evento']} - {row['Municipio']}",
                             "start": start_time,
@@ -1135,7 +1185,6 @@ def vista_disponibilidad_semanal():
                         })
                     except Exception:
                         pass
-            
             cal_options = {
                 "headerToolbar": {
                     "left": "today prev,next",
@@ -1145,14 +1194,14 @@ def vista_disponibilidad_semanal():
                 "initialView": "dayGridMonth",
                 "dayMaxEvents": True
             }
-            
             css_cal2 = """
             .fc-event-title { white-space: normal !important; overflow: hidden; font-size: 0.85em; padding: 2px; }
-            .fc-event-time { display: none !important; }
+            .fc-daygrid-event { border-radius: 4px; border: none; font-weight: bold; }
+            .fc-toolbar-title { font-size: 1.2em !important; font-weight: bold; color: #1e293b; }
             """
             calendar(events=eventos_lista, options=cal_options, custom_css=css_cal2)
         except Exception as e:
-            st.warning("No se pudo cargar el calendario gráfico interactivo.")
+            st.warning("⚠️ Módulo de calendario no disponible. Instale 'streamlit_calendar'.")
 
 def vista_compromisos_tecnicos():
     st.markdown("### 📋 Gestión Avanzada de Compromisos Técnicos e Institucionales")
@@ -1172,8 +1221,26 @@ def vista_compromisos_tecnicos():
                 df_mostrar = df_cv[df_cv["Responsable"] == st.session_state["usuario_conectado"]].copy()
                 
             if not df_mostrar.empty:
-                df_mostrar["Alerta"] = df_mostrar.apply(calcular_semaforo_compromiso, axis=1)
-                st.dataframe(df_mostrar[["Fecha_Acuerdo", "Responsable", "Compromiso", "Plazo", "Estado", "Alerta", "Respuesta_Avance"]], use_container_width=True, hide_index=True)
+                for idx, row in df_mostrar.iterrows():
+                    estado_icono = "🔴" if "PENDIENTE" in row["Estado"] else ("🟡" if "EJECUCIÓN" in row["Estado"] else "🟢")
+                    titulo = f"{estado_icono} {row['Responsable']} | Vence: {row['Plazo']} | {str(row['Compromiso'])[:50]}..."
+                    
+                    with st.expander(titulo):
+                        st.markdown(f"**Semana / Fecha Asignación:** {row['Fecha_Acuerdo']}")
+                        st.markdown(f"**Compromiso Completo:** {row['Compromiso']}")
+                        st.markdown(f"**Avance / Respuesta:** {row['Respuesta_Avance']}")
+                        
+                        if pd.notna(row["Ruta_Soporte"]) and str(row["Ruta_Soporte"]).strip() != "":
+                            ruta_archivo = row["Ruta_Soporte"]
+                            if os.path.exists(ruta_archivo):
+                                with open(ruta_archivo, "rb") as f_archivo: 
+                                    st.download_button(
+                                        label=f"📥 Descargar Soporte Anexo ({os.path.basename(ruta_archivo)})", 
+                                        data=f_archivo.read(), 
+                                        file_name=os.path.basename(ruta_archivo), 
+                                        key=f"dl_soporte_{idx}",
+                                        type="primary"
+                                    )
                 
                 st.markdown("---")
             # st.markdown("#### 💬 Notificar por WhatsApp")
@@ -1194,47 +1261,8 @@ def vista_compromisos_tecnicos():
             #             wa_link = f"https://wa.me/?text={cuerpo}"
             #             st.markdown(f"<a href='{wa_link}' target='_blank' style='display:inline-block; padding: 5px 10px; background-color: #25D366; color: white; border-radius: 5px; text-decoration: none; font-size: 0.8rem; margin-top: 2px;'>🟩 Enviar WhatsApp</a>", unsafe_allow_html=True)
                         
-            st.markdown("---")
-            st.markdown("#### 📄 Generador Oficial de Actas (PDF)")
-            st.caption("Genera un acta en formato PDF para impresión o firma formal.")
-            opciones_pdf = ["Seleccione un compromiso..."] + [f"{idx} - Tarea de {row['Responsable']} ({row['Fecha_Acuerdo']})" for idx, row in df_mostrar.iterrows()]
-            comp_pdf_sel = st.selectbox("Seleccione el compromiso para generar el acta:", opciones_pdf)
-            
-            if comp_pdf_sel != "Seleccione un compromiso...":
-                idx_pdf = int(comp_pdf_sel.split(" - ")[0])
-                row_pdf = df_mostrar.loc[idx_pdf]
-                
-                titulo = "ACTA DE COMPROMISO INSTITUCIONAL"
-                cuerpo = f"En la fecha {row_pdf['Fecha_Acuerdo']}, se establecio el siguiente compromiso de obligatorio cumplimiento para la red de Vigilancia en Salud Publica del departamento:\n\n"
-                cuerpo += f"RESPONSABLE ASIGNADO: {row_pdf['Responsable']}\n"
-                cuerpo += f"COMPROMISO TECNICO: {row_pdf['Compromiso']}\n"
-                cuerpo += f"PLAZO MAXIMO DE ENTREGA: {row_pdf['Plazo']}\n"
-                cuerpo += f"ESTADO ACTUAL: {row_pdf['Estado']}\n\n"
-                cuerpo += "El funcionario asume la responsabilidad de dar estricto cumplimiento a las tareas encomendadas dentro de los terminos establecidos, de conformidad con los lineamientos del Instituto Nacional de Salud y la Secretaria de Salud."
-                
-                pdf_data = generar_pdf_oficial(titulo, cuerpo, row_pdf['Responsable'])
-                if pdf_data:
-                    st.download_button(
-                        label="📥 Descargar Acta de Compromiso (PDF)",
-                        data=pdf_data,
-                        file_name=f"Acta_Compromiso_{str(row_pdf['Responsable']).replace(' ', '_')}.pdf",
-                        mime="application/pdf",
-                        type="primary",
-                        use_container_width=True
-                    )
-            
-            st.markdown("---")
-            st.markdown("#### 📂 Visor de Evidencias / Soportes Oficiales")
-            df_con_soporte = df_mostrar[df_mostrar["Ruta_Soporte"] != ""]
-            if not df_con_soporte.empty:
-                opciones_descarga = [f"{idx} - Tarea de {row['Responsable']} ({row['Fecha_Acuerdo']})" for idx, row in df_con_soporte.iterrows()]
-                comp_elegido = st.selectbox("Seleccione soporte digital para descargar:", opciones_descarga)
-                if comp_elegido:
-                    ruta_archivo = df_con_soporte.loc[int(comp_elegido.split(" - ")[0]), "Ruta_Soporte"]
-                    if os.path.exists(ruta_archivo):
-                        with open(ruta_archivo, "rb") as f_archivo: 
-                            st.download_button(label=f"📥 Documento ({os.path.basename(ruta_archivo)})", data=f_archivo.read(), file_name=os.path.basename(ruta_archivo), use_container_width=True)
-            
+
+
             if st.session_state["rol_conectado"] == "Administrador Total":
                 st.markdown("<br>", unsafe_allow_html=True)
                 with st.expander("🗑️ Depuración de Compromisos (Exclusivo Administrador)"):
@@ -1254,17 +1282,28 @@ def vista_compromisos_tecnicos():
 
     with t_crear:
         with st.form("form_comp", clear_on_submit=True):
-            f_acuerdo = st.date_input("Fecha del Acuerdo/Acta", value=datetime.today())
+            lista_semanas = []
+            hoy = datetime.today()
+            for i in range(-20, 10):
+                lunes = hoy + timedelta(weeks=i)
+                lunes = lunes - timedelta(days=lunes.weekday())
+                domingo = lunes + timedelta(days=6)
+                num_sem = lunes.isocalendar()[1]
+                lista_semanas.append(f"Semana {num_sem} (Del {lunes.strftime('%d/%m/%Y')} al {domingo.strftime('%d/%m/%Y')})")
+                
+            f_acuerdo = st.selectbox("Semana del Compromiso / Comité", lista_semanas, index=20)
             f_compro = st.text_area("Descripción Detallada del Compromiso:")
             f_resp_c = st.selectbox("Funcionario Responsable:", LISTA_RESPONSABLES, key="f_resp_c")
-            f_plazo = st.date_input("Fecha Límite de Entrega:", value=datetime.today() + timedelta(days=5))
+            dias_lunes = (7 - datetime.today().weekday()) % 7
+            if dias_lunes == 0: dias_lunes = 7
+            f_plazo = st.date_input("Fecha Límite de Entrega:", value=datetime.today() + timedelta(days=dias_lunes))
             btn_crear_c = st.form_submit_button("📌 Registrar Compromiso Técnico")
             
         if btn_crear_c:
             if f_compro.strip() == "" or "Seleccione..." in f_resp_c:
                 st.error("❌ Error: La descripción del compromiso y el funcionario responsable son obligatorios.")
             else:
-                nuevo_c = pd.DataFrame([{"Fecha_Acuerdo": f_acuerdo.strftime("%Y-%m-%d"), "Compromiso": f_compro, "Responsable": f_resp_c, "Plazo": f_plazo.strftime("%Y-%m-%d"), "Estado": "🔴 PENDIENTE", "Respuesta_Avance": "", "Ruta_Soporte": ""}])
+                nuevo_c = pd.DataFrame([{"Fecha_Acuerdo": f_acuerdo, "Compromiso": f_compro, "Responsable": f_resp_c, "Plazo": f_plazo.strftime("%Y-%m-%d"), "Estado": "🔴 PENDIENTE", "Respuesta_Avance": "", "Ruta_Soporte": ""}])
                 guardar_datos(pd.concat([df_cv, nuevo_c], ignore_index=True), 'Compromisos')
                 st.session_state["mensaje_exito_temp"] = "📌 ¡Compromiso técnico guardado y asignado exitosamente!"
                 st.rerun()
@@ -1276,10 +1315,15 @@ def vista_compromisos_tecnicos():
             if sel_c_edit:
                 idx_edit = int(sel_c_edit.split(" - ")[0])
                 fila_c = df_cv.loc[idx_edit]
-                f_estado_edit = st.selectbox("Actualizar Estado Operativo:", ["🔴 PENDIENTE", "🟢 CUMPLIDO / FINALIZADO"])
+                f_estado_edit = st.selectbox("Actualizar Estado Operativo:", ["🔴 PENDIENTE", "🟡 EN EJECUCIÓN (Avance Parcial)", "🟢 CUMPLIDO / FINALIZADO"])
+                
+                f_porcentaje = 0
+                if f_estado_edit == "🟡 EN EJECUCIÓN (Avance Parcial)":
+                    f_porcentaje = st.slider("Porcentaje de Avance (%)", min_value=0, max_value=99, step=10)
+                    
                 ruta_almacenada = str(fila_c.get('Ruta_Soporte', ''))
                 
-                archivo_cargado = st.file_uploader("Arrastra aquí el soporte digital / Acta firmada:", type=["pdf", "jpg", "png", "docx"]) if f_estado_edit == "🟢 CUMPLIDO / FINALIZADO" else None
+                archivo_cargado = st.file_uploader("Arrastra aquí el soporte digital / Acta firmada:", type=["pdf", "jpg", "png", "docx"]) if "CUMPLIDO" in f_estado_edit else None
                 f_avance_edit = st.text_area("Acciones de Avance / Justificación Técnico:", value=str(fila_c['Respuesta_Avance']))
                 
                 if st.button("💾 Guardar Cambios"):
@@ -1291,7 +1335,12 @@ def vista_compromisos_tecnicos():
                         ruta_almacenada = ruta_completa_destino
                     
                     df_cv.at[idx_edit, 'Estado'] = f_estado_edit
-                    df_cv.at[idx_edit, 'Respuesta_Avance'] = f_avance_edit
+                    
+                    texto_guardar = f_avance_edit
+                    if f_estado_edit == "🟡 EN EJECUCIÓN (Avance Parcial)":
+                        texto_guardar = f"[AVANCE: {f_porcentaje}%] " + f_avance_edit
+                        
+                    df_cv.at[idx_edit, 'Respuesta_Avance'] = texto_guardar
                     df_cv.at[idx_edit, 'Ruta_Soporte'] = ruta_almacenada
                     guardar_datos(df_cv, 'Compromisos')
                     st.session_state["mensaje_exito_temp"] = "🔄 ¡Compromiso técnico actualizado con éxito!"
@@ -1528,11 +1577,10 @@ def vista_enlaces_hc():
                                         return df_a_descargar[col].tolist()
                                 return [""] * len(df_a_descargar)
                             
-                            df_mapeado['No. Identificación'] = buscar_col(['IDENTIFICACION', 'IDENTIFICACIÓN', 'CÉDULA', 'CEDULA', 'DOCUMENTO', 'CC', 'C.C'])
                             df_mapeado['Nombres y Apellidos'] = buscar_col(['NOMBRE', 'APELLIDO'])
                             df_mapeado['Cargo'] = buscar_col(['CARGO', 'PROFESION', 'PERFIL'])
-                            df_mapeado['Entidad o Dependencia'] = buscar_col(['ENTIDAD', 'INSTITUCION', 'DEPENDENCIA', 'MUNICIPIO', 'EMPRESA', 'LUGAR', 'TRABAJO', 'ESE', 'IPS', 'EAPB'])
-                            df_mapeado['Celular'] = buscar_col(['CELULAR', 'TELEFONO', 'TELÉFONO', 'WHATSAPP'])
+                            df_mapeado['Entidad o Dependencia'] = buscar_col(['ENTIDAD', 'INSTITUCION', 'DEPENDENCIA', 'EMPRESA', 'LUGAR', 'TRABAJO', 'ESE', 'IPS', 'EAPB'])
+                            df_mapeado['Municipio'] = buscar_col(['MUNICIPIO', 'CIUDAD', 'UBICACION'])
                             df_mapeado['Correo'] = buscar_col(['CORREO', 'EMAIL', 'E-MAIL'])
                             df_mapeado['Firma y Autorización'] = [""] * len(df_a_descargar)
                             
@@ -1544,7 +1592,27 @@ def vista_enlaces_hc():
                             pdf_disponible = False
                             try:
                                 from fpdf import FPDF
+                                
+                                col_widths_pdf = [10, 70, 40, 45, 35, 40, 20]
+                                
                                 class PDFAsistencia(FPDF):
+                                    def header(self):
+                                        for ext in ['png', 'jpg', 'jpeg']:
+                                            if os.path.exists(f"membrete.{ext}"):
+                                                self.image(f"membrete.{ext}", x=90, y=10, w=100)
+                                                self.ln(35)
+                                                break
+                                                
+                                        self.set_font("Arial", 'B', 12)
+                                        self.cell(0, 10, f"LISTADO DE ASISTENCIA VIRTUAL DEL EVENTO: {tema_vsp.upper()}", ln=True, align='C')
+                                        self.ln(5)
+                                        
+                                        self.set_font("Arial", 'B', 8)
+                                        cols = ['No.', 'Nombres y Apellidos', 'Cargo', 'Entidad', 'Municipio', 'Correo', 'Firma']
+                                        for w, col_name in zip(col_widths_pdf, cols):
+                                            self.cell(w, 8, col_name, border=1, align='C')
+                                        self.ln()
+
                                     def footer(self):
                                         self.set_y(-30)
                                         for ext in ['png', 'jpg', 'jpeg']:
@@ -1553,36 +1621,18 @@ def vista_enlaces_hc():
                                                 break
                                                 
                                 pdf = PDFAsistencia(orientation='L', unit='mm', format='Letter')
+                                pdf.set_auto_page_break(auto=True, margin=35)
                                 pdf.add_page()
-                                
-                                for ext in ['png', 'jpg', 'jpeg']:
-                                    if os.path.exists(f"membrete.{ext}"):
-                                        pdf.image(f"membrete.{ext}", x=90, y=10, w=100)
-                                        pdf.ln(35)
-                                        break
-                                        
-                                pdf.set_font("Arial", 'B', 12)
-                                pdf.cell(0, 10, f"LISTADO DE ASISTENCIA - {tema_vsp.upper()}", ln=True, align='C')
-                                pdf.ln(5)
-                                
-                                pdf.set_font("Arial", 'B', 8)
-                                col_widths = [10, 25, 60, 35, 45, 25, 40, 20]
-                                cols = ['No.', 'Identidad', 'Nombres y Apellidos', 'Cargo', 'Entidad', 'Celular', 'Correo', 'Firma']
-                                
-                                for w, col_name in zip(col_widths, cols):
-                                    pdf.cell(w, 8, col_name, border=1, align='C')
-                                pdf.ln()
                                 
                                 pdf.set_font("Arial", '', 8)
                                 for i, r_pdf in df_mapeado.iterrows():
-                                    pdf.cell(col_widths[0], 6, str(r_pdf['No.'])[:5], border=1)
-                                    pdf.cell(col_widths[1], 6, str(r_pdf['No. Identificación'])[:15], border=1)
-                                    pdf.cell(col_widths[2], 6, str(r_pdf['Nombres y Apellidos'])[:45], border=1)
-                                    pdf.cell(col_widths[3], 6, str(r_pdf['Cargo'])[:25], border=1)
-                                    pdf.cell(col_widths[4], 6, str(r_pdf['Entidad o Dependencia'])[:30], border=1)
-                                    pdf.cell(col_widths[5], 6, str(r_pdf['Celular'])[:15], border=1)
-                                    pdf.cell(col_widths[6], 6, str(r_pdf['Correo'])[:25], border=1)
-                                    pdf.cell(col_widths[7], 6, "", border=1)
+                                    pdf.cell(col_widths_pdf[0], 6, str(r_pdf['No.'])[:5], border=1)
+                                    pdf.cell(col_widths_pdf[1], 6, str(r_pdf['Nombres y Apellidos'])[:45], border=1)
+                                    pdf.cell(col_widths_pdf[2], 6, str(r_pdf['Cargo'])[:25], border=1)
+                                    pdf.cell(col_widths_pdf[3], 6, str(r_pdf['Entidad o Dependencia'])[:30], border=1)
+                                    pdf.cell(col_widths_pdf[4], 6, str(r_pdf['Municipio'])[:20], border=1)
+                                    pdf.cell(col_widths_pdf[5], 6, str(r_pdf['Correo'])[:25], border=1)
+                                    pdf.cell(col_widths_pdf[6], 6, "[ Firmado ]", border=1, align='C')
                                     pdf.ln()
                                     
                                 buffer_pdf = pdf.output(dest='S').encode('latin1')
@@ -1996,7 +2046,7 @@ def vista_panel_maestro():
             else:
                 u_rol = u_rol_sel
             # Multi-select para los permisos exactos
-            lista_todas_vistas = list(mapeo_vistas.keys()) if 'mapeo_vistas' in globals() else ["🏠 Inicio", "📝 Registrar Actividad", "🧑‍⚕️ Disponibilidad Semanal", "🤝 Compromisos Técnicos", "📨 Enlaces y Solicitudes HC", "📁 Actas e Informes", "🚨 Alertas e Inventario", "📊 Filtros y Dashboard", "👑 Panel Maestro y Roles", "🏘️ Vigilancia Comunitaria (VBC)", "📊 Tableros SIVIGILA", "🗺️ Georreferenciación", "🛡️ Calidad del Dato", "📇 Directorio de Red", "🪦 Sala de Mortalidades"]
+            lista_todas_vistas = list(mapeo_vistas.keys()) if 'mapeo_vistas' in globals() else ["🏠 Inicio", "📝 Registrar Actividad", "🧑‍⚕️ Disponibilidad Semanal", "🤝 Compromisos Técnicos", "📨 Enlaces y Solicitudes HC", "📁 Actas e Informes", "🚨 Alertas e Inventario", "📊 Filtros y Dashboard", "👑 Panel Maestro y Roles", "🏘️ Vigilancia Comunitaria (VBC)", "📊 Tableros SIVIGILA", "📇 Directorio de Red", "🪦 Sala de Mortalidades"]
             u_permisos = st.multiselect("Permisos de Acceso a Módulos:", lista_todas_vistas, default=["🏠 Inicio", "📝 Registrar Actividad"])
             
             btn_add_user = st.form_submit_button("👥 Crear y Sincronizar Usuario")
@@ -2045,7 +2095,7 @@ def vista_panel_maestro():
                     e_rol = e_rol_sel
                 
                 permisos_actuales = [p.strip() for p in str(datos_u.get("Permisos", "🏠 Inicio,📝 Registrar Actividad")).split(",") if p.strip()]
-                lista_todas_vistas_f = list(mapeo_vistas.keys()) if 'mapeo_vistas' in globals() else ["🏠 Inicio", "📝 Registrar Actividad", "🧑‍⚕️ Disponibilidad Semanal", "🤝 Compromisos Técnicos", "📨 Enlaces y Solicitudes HC", "📁 Actas e Informes", "🚨 Alertas e Inventario", "📊 Filtros y Dashboard", "🛑 Tablero de Problemas", "🏘️ Vigilancia Comunitaria (VBC)", "📊 Tableros SIVIGILA", "🛡️ Calidad del Dato", "📇 Directorio de Red", "🤖 Asistente Redactor VSP", "👑 Panel Maestro y Roles", "🕵️ Auditoría y Logs", "🪦 Sala de Mortalidades"]
+                lista_todas_vistas_f = list(mapeo_vistas.keys()) if 'mapeo_vistas' in globals() else ["🏠 Inicio", "📝 Registrar Actividad", "🧑‍⚕️ Disponibilidad Semanal", "🤝 Compromisos Técnicos", "📨 Enlaces y Solicitudes HC", "📁 Actas e Informes", "🚨 Alertas e Inventario", "📊 Filtros y Dashboard", "🛑 Tablero de Problemas", "🏘️ Vigilancia Comunitaria (VBC)", "📊 Tableros SIVIGILA", "📇 Directorio de Red", "👑 Panel Maestro y Roles", "🕵️ Auditoría y Logs", "🪦 Sala de Mortalidades"]
                 permisos_actuales = [p for p in permisos_actuales if p in lista_todas_vistas_f]
                 
                 nuevo_permiso = st.multiselect(f"Permisos de Módulos:", lista_todas_vistas_f, default=permisos_actuales, key=f"ms_{u_edit}")
@@ -2597,31 +2647,7 @@ def vista_sivigila():
 
             
             with t1:
-                st.markdown("#### 🗺️ Mapa Epidemiológico (Sucre)")
-                if col_mun:
-                    df_mapa = df_siv.copy()
-                    df_mapa["Mun_Normalizado"] = df_mapa[col_mun].astype(str).str.upper().str.strip()
-                    import unicodedata
-                    df_mapa["Mun_Normalizado"] = df_mapa["Mun_Normalizado"].apply(
-                        lambda x: ''.join(c for c in unicodedata.normalize('NFD', str(x)) if unicodedata.category(c) != 'Mn')
-                    )
-                    
-                    df_mapa["Lat"] = df_mapa["Mun_Normalizado"].map(lambda x: SUCRE_COORDENADAS.get(x, {}).get("lat", None))
-                    df_mapa["Lon"] = df_mapa["Mun_Normalizado"].map(lambda x: SUCRE_COORDENADAS.get(x, {}).get("lon", None))
-                    
-                    df_mapa_val = df_mapa.dropna(subset=["Lat", "Lon"])
-                    if not df_mapa_val.empty:
-                        conteo_mapa = df_mapa_val.groupby(["Mun_Normalizado", "Lat", "Lon"]).size().reset_index(name="Casos")
-                        fig_map = px.scatter_mapbox(
-                            conteo_mapa, lat="Lat", lon="Lon", size="Casos", color="Casos",
-                            hover_name="Mun_Normalizado", zoom=7, mapbox_style="carto-positron",
-                            color_continuous_scale="Reds", size_max=40, title="Concentración de Casos por Municipio"
-                        )
-                        st.plotly_chart(fig_map, use_container_width=True)
-                    else:
-                        st.info("No se pudieron emparejar los municipios con el mapa.")
-                else:
-                    st.info("No se detectó columna de municipio para el mapa territorial.")
+
                     
                 st.markdown("#### 📈 Análisis de Tendencia (Semanas y Acumulado)")
                 if col_sem:
@@ -3130,28 +3156,6 @@ def vista_sala_mortalidades():
         except Exception as e:
             st.error(f"Error procesando módulo de mortalidades: {str(e)}")
 
-def vista_calidad_dato():
-    st.markdown("### 🛡️ Módulo de Calidad del Dato")
-    st.info("Auditoría automática de bases de datos SIVIGILA.")
-    archivo = st.file_uploader("Cargar Base SIVIGILA para Auditoría", type=["csv", "xlsx"], key="calidad")
-    if archivo:
-        try:
-            if archivo.name.endswith(".csv"):
-                df_siv = pd.read_csv(archivo, encoding='latin1', sep=';')
-                if len(df_siv.columns) < 5: df_siv = pd.read_csv(archivo, encoding='utf-8', sep=',')
-            else:
-                df_siv = pd.read_excel(archivo)
-            
-            nulos = df_siv.isnull().sum()
-            nulos_criticos = nulos[nulos > 0].sort_values(ascending=False)
-            st.markdown("#### 🚨 Variables con Datos Faltantes (Inconsistencias)")
-            if not nulos_criticos.empty:
-                st.dataframe(pd.DataFrame({"Variables": nulos_criticos.index, "Cantidad Nulos": nulos_criticos.values}))
-            else:
-                st.success("¡Excelente! No hay valores nulos en la base de datos.")
-        except Exception as e:
-            st.error(f"Error procesando el archivo: {e}")
-
 def limpiar_df_directorio(df_raw):
     df = df_raw.copy()
     col_str = ' '.join(df.columns.dropna().astype(str).str.upper().tolist())
@@ -3479,105 +3483,6 @@ def vista_tablero_problemas():
         else:
             st.info("✅ El tablero está limpio. No hay problemas reportados en el sistema.")
 
-def vista_asistente_ia():
-    st.markdown("### 🤖 Asistente Redactor VSP (Generador Inteligente)")
-    st.info("Usa este módulo para redactar rápidamente correos institucionales, respuestas a entes de control o comunicados técnicos sin escribir desde cero.")
-    
-    tipo_texto = st.selectbox("¿Qué deseas que redacte el asistente?", [
-        "Seleccione...",
-        "Solicitud Formal de Plazo (Ministerio/INS)",
-        "Respuesta a Requerimiento de Procuraduría/Contraloría",
-        "Convocatoria Urgente a Sala Situacional",
-        "Comunicado de Alerta a Hospitales/Clínicas"
-    ])
-    
-    if tipo_texto != "Seleccione...":
-        asunto = st.text_input("Asunto/Tema Central:", placeholder="Ej: Brote de Dengue en Sincelejo")
-        destinatario = st.text_input("Destinatario (Entidad o Persona):", placeholder="Ej: Instituto Nacional de Salud")
-        
-        if st.button("✨ Generar Redacción Automática", type="primary"):
-            if not asunto or not destinatario:
-                st.error("Por favor completa el Asunto y el Destinatario para generar el documento.")
-            else:
-                fecha_hoy = datetime.today().strftime('%d de %B de %Y')
-                
-                if "Plazo" in tipo_texto:
-                    borrador = f"Sincelejo, {fecha_hoy}\n\nSeñores,\n{destinatario}\n\nAsunto: Solicitud de prórroga para entrega de informe sobre {asunto}.\n\nCordial saludo.\n\nPor medio del presente escrito, y desde la coordinación de Vigilancia en Salud Pública de la Gobernación de Sucre, nos dirigimos a ustedes de la manera más respetuosa para solicitar una extensión del plazo otorgado para la presentación del informe relacionado con {asunto}.\n\nActualmente, nuestro equipo técnico se encuentra consolidando la información de campo enviada por los diferentes municipios, lo cual ha tomado más tiempo del estimado debido a problemas técnicos en el flujo de datos. Nos comprometemos a radicar el informe definitivo en un plazo no mayor a 3 días hábiles.\n\nAgradeciendo de antemano su comprensión y colaboración.\n\nAtentamente,\n\nSubprograma de Vigilancia en Salud Pública\nGobernación de Sucre."
-                elif "Requerimiento" in tipo_texto:
-                    borrador = f"Sincelejo, {fecha_hoy}\n\nSeñores,\n{destinatario}\n\nAsunto: Respuesta formal a requerimiento sobre {asunto}.\n\nRespetados señores.\n\nEn atención a la solicitud de la referencia, remitida a esta oficina, el equipo de Vigilancia en Salud Pública de la Secretaría de Salud Departamental se permite dar respuesta formal respecto a los hallazgos y seguimientos relacionados con {asunto}.\n\nAdjunto a esta comunicación, encontrarán los soportes técnicos, matrices de Excel y actas de compromisos que evidencian la gestión realizada por nuestro equipo en los municipios afectados. Hemos cumplido con los lineamientos del Instituto Nacional de Salud para mitigar el riesgo descrito.\n\nQuedamos a su entera disposición para cualquier aclaración técnica que requieran sobre los documentos anexos.\n\nCordialmente,\n\nCoordinación de Epidemiología\nGobernación de Sucre."
-                elif "Convocatoria" in tipo_texto:
-                    borrador = f"**URGENTE - CONVOCATORIA A SALA SITUACIONAL**\n\nFecha: {fecha_hoy}\nDestinatario: {destinatario}\nAsunto: {asunto}\n\nEstimado equipo,\n\nDebido a la evolución epidemiológica reciente referente a {asunto}, se convoca de carácter obligatorio y urgente a una Sala Situacional Extraordinaria.\n\nEl objetivo de la reunión es analizar los datos de la última semana epidemiológica, establecer responsabilidades inmediatas y coordinar el despliegue del Equipo de Respuesta Inmediata (ERI) en la zona de brote.\n\nPor favor, asistir con los informes y bases de datos consolidadas de sus respectivos municipios o áreas de competencia.\n\nSaludos,\nVigilancia en Salud Pública."
-                else:
-                    borrador = f"COMUNICADO OFICIAL DE ALERTA\n\nDestino: {destinatario}\nAsunto: {asunto}\nFecha de Emisión: {fecha_hoy}\n\nSe informa a toda la red hospitalaria y clínica del departamento que se ha activado una alerta preventiva por {asunto}.\n\nSe requiere fortalecer la captación e intensificar la búsqueda activa institucional y comunitaria para este evento. Recordamos que la notificación en SIVIGILA debe hacerse dentro de las próximas 24 horas frente a cualquier caso probable.\n\nAgradecemos su apoyo en la difusión inmediata de esta circular interna."
-                
-                st.success("✅ Texto generado exitosamente.")
-                st.text_area("Borrador Final (Listo para copiar y pegar):", value=borrador, height=350)
-
-# ==========================================
-# FUNCIONES DE MÓDULOS AVANZADOS (INTELIGENCIA EPIDEMIOLÓGICA)
-# ==========================================
-
-def vista_mapas_vsp():
-    st.markdown("<h2 class='main-title'>🗺️ Módulo de Georreferenciación VSP</h2>", unsafe_allow_html=True)
-    st.markdown("<p class='sub-title'>Visualización espacial de brotes y alertas epidemiológicas en Sucre.</p>", unsafe_allow_html=True)
-    
-    sucre_coords = {
-        'SINCELEJO': [9.3047, -75.3978], 'COROZAL': [9.3115, -75.2952], 'SAN MARCOS': [8.5303, -75.1322],
-        'SAMPUÉS': [9.1822, -75.3811], 'TOLÚ': [9.5244, -75.5806], 'COVEÑAS': [9.4005, -75.6811],
-        'SINCÉ': [9.2458, -75.1481], 'MAJAGUAL': [8.5414, -74.6225], 'GUARANDA': [8.4550, -74.5297],
-        'SUCRE': [8.8105, -74.7266], 'MORROA': [9.3364, -75.3056], 'LOS PALMITOS': [9.3814, -75.2678],
-        'BUENAVISTA': [9.3086, -74.9669], 'SAN PEDRO': [9.3900, -75.0592], 'BETULIA': [9.2778, -75.2444],
-        'GALERAS': [9.1625, -75.0253], 'EL ROBLE': [9.1000, -75.1950], 'CHALÁN': [9.5442, -75.3125],
-        'COLOSÓ': [9.4897, -75.3528], 'OVEJAS': [9.5275, -75.2289], 'SAN ONOFRE': [9.7358, -75.5261],
-        'TOLUVIEJO': [9.4503, -75.4372], 'CAIMITO': [8.8186, -75.1306], 'LA UNIÓN': [8.8572, -75.2817],
-        'SAN BENITO ABAD': [8.9281, -75.0264], 'SAN JUAN DE BETULIA': [9.2778, -75.2444]
-    }
-    
-    st.markdown("<div class='metric-card'>", unsafe_allow_html=True)
-    df_brotes = cargar_datos('Brotes_ERI')
-    df_alertas = cargar_datos('Tablero_Problemas')
-    
-    map_data = []
-    if len(df_brotes) > 0 or len(df_alertas) > 0:
-        brotes_count = df_brotes['Municipio'].value_counts().to_dict() if len(df_brotes) > 0 else {}
-        alertas_count = df_alertas['Municipio'].value_counts().to_dict() if len(df_alertas) > 0 else {}
-        
-        for m, c in sucre_coords.items():
-            b_cnt = brotes_count.get(m, 0)
-            a_cnt = alertas_count.get(m, 0)
-            total = b_cnt + a_cnt
-            if total > 0:
-                map_data.append({"Municipio": m, "lat": c[0], "lon": c[1], "Eventos": total, "Tipo": "Brote/Alerta"})
-        
-        if map_data:
-            st.success(f"📍 Se encontraron {sum([d['Eventos'] for d in map_data])} eventos activos en {len(map_data)} municipios.")
-        else:
-            st.info("✅ No hay brotes ni alertas activos en la base de datos.")
-    else:
-        st.info("✅ No hay registros de brotes o alertas en el sistema.")
-        
-    if not map_data:
-        map_data = [{"Municipio": m, "lat": c[0], "lon": c[1], "Eventos": 0, "Tipo": "Normal"} for m, c in sucre_coords.items()]
-        
-    df_map = pd.DataFrame(map_data)
-    
-    try:
-        import plotly.express as px
-        if df_map['Eventos'].sum() > 0:
-            df_map['Tamano'] = df_map['Eventos'] * 15
-            fig = px.scatter_mapbox(df_map, lat="lat", lon="lon", hover_name="Municipio", hover_data=["Eventos"],
-                                    color="Eventos", color_continuous_scale="Reds", size="Tamano",
-                                    zoom=7, height=600, mapbox_style="carto-positron")
-        else:
-            fig = px.scatter_mapbox(df_map, lat="lat", lon="lon", hover_name="Municipio",
-                                    color_discrete_sequence=["#2563eb"], zoom=7, height=600, mapbox_style="carto-positron")
-        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-        st.plotly_chart(fig, use_container_width=True)
-    except Exception as e:
-        st.map(df_map)
-        
-    st.markdown("</div>", unsafe_allow_html=True)
-    
 def vista_kanban_casos():
     st.markdown("<h2 class='main-title'>📌 Kanban de Casos Críticos</h2>", unsafe_allow_html=True)
     st.markdown("<p class='sub-title'>Gestión visual de casos de seguimiento estricto.</p>", unsafe_allow_html=True)
@@ -3906,95 +3811,6 @@ def vista_dashboard_sivigila():
         
     st.markdown("</div>", unsafe_allow_html=True)
 
-def vista_muestras_laboratorio():
-    st.markdown("<h2 class='main-title'>🧪 Trazabilidad de Muestras - LDSP</h2>", unsafe_allow_html=True)
-    st.markdown("<p class='sub-title'>Seguimiento de muestras enviadas al Laboratorio Departamental.</p>", unsafe_allow_html=True)
-    
-    df_muestras = cargar_datos('Muestras_Lab')
-    
-    with st.expander("➕ Registrar Envío de Nueva Muestra", expanded=False):
-        with st.form("form_nueva_muestra", clear_on_submit=True):
-            col1, col2 = st.columns(2)
-            m_id = col1.text_input("Identificación / Nombre del Paciente:")
-            m_mun = col2.selectbox("Municipio de Origen:", LISTA_MUNICIPIOS)
-            m_tipo = col1.selectbox("Tipo de Muestra:", ["Suero", "LCR", "Hisopado Nasofaríngeo", "Tejido/Cerebro (Rabia)", "Heces", "Sangre Total", "Otro"])
-            m_evento = col2.selectbox("Evento Sospechoso:", ["Dengue", "Zika", "Chikungunya", "Rabia", "IRA / COVID-19", "EDA / Cólera", "Sarampión/Rubeola", "Otro"])
-            m_fecha = st.date_input("Fecha de Envío al LDSP:", value=datetime.today())
-            
-            btn_add = st.form_submit_button("Guardar Registro", type="primary")
-            
-            if btn_add and m_id.strip() != "" and m_mun != "Seleccione...":
-                nueva_m = pd.DataFrame([{
-                    "Fecha_Envio": m_fecha.strftime("%Y-%m-%d"),
-                    "Paciente_Identificacion": m_id.upper(),
-                    "Municipio": m_mun,
-                    "Tipo_Muestra": m_tipo,
-                    "Evento_Sospechoso": m_evento,
-                    "Estado": "Enviada / Pendiente",
-                    "Resultado": "N/A",
-                    "Dias_Espera": 0
-                }])
-                df_muestras = pd.concat([df_muestras, nueva_m], ignore_index=True)
-                guardar_datos(df_muestras, 'Muestras_Lab')
-                st.session_state["mensaje_exito_temp"] = "✅ Muestra registrada exitosamente."
-                st.rerun()
-
-    st.markdown("---")
-    
-    try:
-        if not df_muestras.empty:
-            df_muestras["Fecha_Envio"] = pd.to_datetime(df_muestras["Fecha_Envio"])
-            df_muestras["Dias_Espera"] = (pd.Timestamp.now().normalize() - df_muestras["Fecha_Envio"]).dt.days
-    except Exception:
-        pass
-        
-    st.markdown("### 📋 Listado de Muestras Activas")
-    
-    if df_muestras.empty:
-        st.info("No hay muestras registradas actualmente.")
-    else:
-        for idx, row in df_muestras.iterrows():
-            with st.container():
-                color_borde = "#3b82f6" if row["Estado"] == "Enviada / Pendiente" else "#10b981" if row["Resultado"] == "Negativo" else "#ef4444"
-                
-                if pd.api.types.is_datetime64_any_dtype(row['Fecha_Envio']):
-                    fecha_str = row['Fecha_Envio'].strftime('%Y-%m-%d')
-                else:
-                    fecha_str = str(row['Fecha_Envio']).split(' ')[0]
-                    
-                st.markdown(f"""
-                <div style='background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 5px solid {color_borde}; margin-bottom: 10px;'>
-                    <div style='display: flex; justify-content: space-between;'>
-                        <div>
-                            <h4 style='margin: 0; color: white;'>{row['Paciente_Identificacion']}</h4>
-                            <p style='margin: 0; color: #94a3b8; font-size: 0.9rem;'>{row['Tipo_Muestra']} | {row['Evento_Sospechoso']} | {row['Municipio']}</p>
-                            <small style='color: #cbd5e1;'>Enviada: {fecha_str} ({row['Dias_Espera']} días de espera)</small>
-                        </div>
-                        <div style='text-align: right;'>
-                            <span style='background-color: #1e293b; padding: 5px 10px; border-radius: 5px; font-weight: bold; color: {color_borde};'>
-                                {row['Estado']}
-                            </span>
-                            <br><br>
-                            <b>Resultado:</b> {row['Resultado']}
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                if row["Estado"] == "Enviada / Pendiente":
-                    col_b1, col_b2, col_b3 = st.columns([1, 1, 2])
-                    if col_b1.button("Positivo 🔴", key=f"pos_{idx}", use_container_width=True):
-                        df_muestras.at[idx, 'Estado'] = "Procesada"
-                        df_muestras.at[idx, 'Resultado'] = "Positivo"
-                        guardar_datos(df_muestras, 'Muestras_Lab')
-                        st.rerun()
-                    if col_b2.button("Negativo 🟢", key=f"neg_{idx}", use_container_width=True):
-                        df_muestras.at[idx, 'Estado'] = "Procesada"
-                        df_muestras.at[idx, 'Resultado'] = "Negativo"
-                        guardar_datos(df_muestras, 'Muestras_Lab')
-                        st.rerun()
-                st.markdown("<br>", unsafe_allow_html=True)
-
 def vista_gestion_riesgos():
     st.markdown("<h2 class='main-title'>⚠️ Gestión del Riesgo Epidemiológico y Operativo</h2>", unsafe_allow_html=True)
     st.markdown("<p class='sub-title'>Identificación, evaluación y mitigación de amenazas departamentales.</p>", unsafe_allow_html=True)
@@ -4156,18 +3972,14 @@ mapeo_vistas = {
     "🏘️ Vigilancia Comunitaria (VBC)": vista_vbc,
     "🚨 SIVIGILA Territorial (Comando)": vista_sivigila_territorial,
     "📈 Tableros SIVIGILA": vista_sivigila,
-    "🛡️ Calidad del Dato": vista_calidad_dato,
     "📞 Directorio de Red": vista_directorio,
-    "🤖 Asistente Redactor VSP": vista_asistente_ia,
     "🪦 Sala de Mortalidades": vista_sala_mortalidades,
-    "🗺️ Georreferenciación": vista_mapas_vsp,
     "📌 Kanban Críticos": vista_kanban_casos,
     "🏥 Silencio Epi": vista_silencio_bai,
     "🤖 Asistente Protocolos": vista_asistente_ins,
     "📊 Tablero Avanzado": vista_dashboard_sivigila,
     "⚙️ Panel Maestro y Roles": vista_panel_maestro,
     "🕵️ Auditoría y Logs": vista_auditoria,
-    "🧪 Muestras de Laboratorio": vista_muestras_laboratorio,
     "🎂 Gestionar Cumpleaños": vista_gestion_cumpleanos
 }
 
