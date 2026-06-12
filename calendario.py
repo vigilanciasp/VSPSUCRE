@@ -734,6 +734,7 @@ def vista_inicio():
         comp_cumplidos = len(df_cv[df_cv["Estado"].astype(str).str.contains("CUMPLIDO|FINALIZADO", case=False, na=False)])
         porc_cumplimiento = int((comp_cumplidos / comp_totales) * 100)
     else:
+        comp_cumplidos = 0
         porc_cumplimiento = 100
         
     # 4. Muestras en Mora
